@@ -7,8 +7,15 @@ import { RGB, RGBA, Vector2, Vector3, VectorXZ } from "@minecraft/server";
  * @returns An object containing the red, green, blue, and alpha components as numbers between 0 and 1.
  * @throws Error if the hex string is invalid.
  */
-export function hexToRgba(hex: string, stripAlpha: boolean = false): RGB | RGBA {
-	if (!/^#([a-fA-F0-9]{4}|[a-fA-F0-9]{8}|[a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/.test(hex)) {
+export function hexToRgba(
+	hex: string,
+	stripAlpha: boolean = false,
+): RGB | RGBA {
+	if (
+		!/^#([a-fA-F0-9]{4}|[a-fA-F0-9]{8}|[a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/.test(
+			hex,
+		)
+	) {
 		throw new Error("Invalid hex color");
 	}
 
@@ -23,7 +30,10 @@ export function hexToRgba(hex: string, stripAlpha: boolean = false): RGB | RGBA 
 	const red = parseInt(normalized.substring(0, 2), 16) / 255;
 	const green = parseInt(normalized.substring(2, 4), 16) / 255;
 	const blue = parseInt(normalized.substring(4, 6), 16) / 255;
-	const alpha = (normalized.length === 8 ? parseInt(normalized.substring(6, 8), 16) : 255) / 255;
+	const alpha =
+		(normalized.length === 8
+			? parseInt(normalized.substring(6, 8), 16)
+			: 255) / 255;
 
 	if (stripAlpha) {
 		return { red, green, blue };
@@ -59,14 +69,20 @@ export function inRange(value: number, min: number, max: number): boolean {
  * A utility class for performing operations on 3D vectors.
  */
 export class Vector {
-	static apply<T extends Vector3 | Vector2 | VectorXZ>(v: T, fn: (component: number) => any): T {
+	static apply<T extends Vector3 | Vector2 | VectorXZ>(
+		v: T,
+		fn: (component: number) => any,
+	): T {
 		const result: any = { x: fn(v.x) };
 		if ("y" in v) result.y = fn(v.y);
 		if ("z" in v) result.z = fn(v.z);
 		return result as T;
 	}
 
-	static add<T extends Vector3 | Vector2 | VectorXZ>(v1: T, ...vectors: T[]): T {
+	static add<T extends Vector3 | Vector2 | VectorXZ>(
+		v1: T,
+		...vectors: T[]
+	): T {
 		const result = Vector.copy(v1);
 		for (const v of vectors) {
 			result.x += v.x;
@@ -80,7 +96,10 @@ export class Vector {
 		return result;
 	}
 
-	static subtract<T extends Vector3 | Vector2 | VectorXZ>(v1: T, ...vectors: T[]): T {
+	static subtract<T extends Vector3 | Vector2 | VectorXZ>(
+		v1: T,
+		...vectors: T[]
+	): T {
 		const result = Vector.copy(v1);
 		for (const v of vectors) {
 			result.x -= v.x;
@@ -94,11 +113,17 @@ export class Vector {
 		return result;
 	}
 
-	static scalarDivide<T extends Vector3 | Vector2 | VectorXZ>(v: T, scalar: number): T {
+	static scalarDivide<T extends Vector3 | Vector2 | VectorXZ>(
+		v: T,
+		scalar: number,
+	): T {
 		return Vector.apply(v, (component) => component / scalar);
 	}
 
-	static scalarMultiply<T extends Vector3 | Vector2 | VectorXZ>(v: T, scalar: number): T {
+	static scalarMultiply<T extends Vector3 | Vector2 | VectorXZ>(
+		v: T,
+		scalar: number,
+	): T {
 		return Vector.apply(v, (component) => component * scalar);
 	}
 
@@ -122,7 +147,10 @@ export class Vector {
 		return Vector.scalarDivide(v, mag);
 	}
 
-	static distance<T extends Vector3 | Vector2 | VectorXZ>(v1: T, v2: T): number {
+	static distance<T extends Vector3 | Vector2 | VectorXZ>(
+		v1: T,
+		v2: T,
+	): number {
 		const diff = Vector.subtract(v1, v2);
 		return Vector.magnitude(diff);
 	}
@@ -239,3 +267,6 @@ export class Trigonometry {
 		return -this.signedAngle((to - from + 360) % 360);
 	}
 }
+
+export * from "./BFSScanner";
+export * from "./Perlin2D";

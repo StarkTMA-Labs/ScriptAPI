@@ -80,7 +80,9 @@ export class ScanResult {
 
 		let chunk = this.chunks.get(key);
 		if (!chunk) {
-			chunk = new Int32Array(ScanResult.CHUNK_SIZE * ScanResult.CHUNK_SIZE).fill(ScanResult.SENTINEL);
+			chunk = new Int32Array(
+				ScanResult.CHUNK_SIZE * ScanResult.CHUNK_SIZE,
+			).fill(ScanResult.SENTINEL);
 			this.chunks.set(key, chunk);
 		}
 
@@ -144,7 +146,7 @@ export class ScanResult {
 		center?: Vector3,
 		minRadius?: number,
 		maxRadius?: number,
-		filter?: (pos: Vector3) => boolean
+		filter?: (pos: Vector3) => boolean,
 	): Vector3 | undefined {
 		if (this.chunks.size === 0) return undefined;
 
@@ -156,17 +158,31 @@ export class ScanResult {
 			// Radius in blocks -> Radius in chunks?
 			// Max radius in blocks.
 			// Chunk size in blocks = 16 * 8 = 128.
-			const chunkSizeInBlocks = ScanResult.CHUNK_SIZE * ScanResult.CELL_SIZE;
-			const minChunkX = (center.x - maxRadius) >> (ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
-			const maxChunkX = (center.x + maxRadius) >> (ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
-			const minChunkZ = (center.z - maxRadius) >> (ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
-			const maxChunkZ = (center.z + maxRadius) >> (ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+			const chunkSizeInBlocks =
+				ScanResult.CHUNK_SIZE * ScanResult.CELL_SIZE;
+			const minChunkX =
+				(center.x - maxRadius) >>
+				(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+			const maxChunkX =
+				(center.x + maxRadius) >>
+				(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+			const minChunkZ =
+				(center.z - maxRadius) >>
+				(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+			const maxChunkZ =
+				(center.z + maxRadius) >>
+				(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
 
 			keys = keys.filter((key) => {
 				const [cxStr, czStr] = key.split(",");
 				const cx = parseInt(cxStr);
 				const cz = parseInt(czStr);
-				return cx >= minChunkX && cx <= maxChunkX && cz >= minChunkZ && cz <= maxChunkZ;
+				return (
+					cx >= minChunkX &&
+					cx <= maxChunkX &&
+					cz >= minChunkZ &&
+					cz <= maxChunkZ
+				);
 			});
 		}
 
@@ -181,15 +197,21 @@ export class ScanResult {
 				const chunkZ = parseInt(chunkZStr);
 
 				for (let i = 0; i < 5; i++) {
-					const localX = Math.floor(Math.random() * ScanResult.CHUNK_SIZE);
-					const localZ = Math.floor(Math.random() * ScanResult.CHUNK_SIZE);
+					const localX = Math.floor(
+						Math.random() * ScanResult.CHUNK_SIZE,
+					);
+					const localZ = Math.floor(
+						Math.random() * ScanResult.CHUNK_SIZE,
+					);
 					const index = (localZ << ScanResult.CHUNK_SHIFT) | localX;
 					const y = chunk[index];
 
 					if (y !== ScanResult.SENTINEL) {
 						// Convert back to world coordinates (first coordinate of the cell)
-						const cellX = (chunkX << ScanResult.CHUNK_SHIFT) + localX;
-						const cellZ = (chunkZ << ScanResult.CHUNK_SHIFT) + localZ;
+						const cellX =
+							(chunkX << ScanResult.CHUNK_SHIFT) + localX;
+						const cellZ =
+							(chunkZ << ScanResult.CHUNK_SHIFT) + localZ;
 						const x = cellX << ScanResult.CELL_SHIFT;
 						const z = cellZ << ScanResult.CELL_SHIFT;
 						const pos = { x, y, z };
@@ -199,7 +221,12 @@ export class ScanResult {
 							const dz = z - center.z;
 							const distSq = dx * dx + dz * dz;
 							if (distSq > maxRadius * maxRadius) continue;
-							if (enforceMin && minRadius && distSq < minRadius * minRadius) continue;
+							if (
+								enforceMin &&
+								minRadius &&
+								distSq < minRadius * minRadius
+							)
+								continue;
 						}
 
 						if (filter && !filter(pos)) continue;
@@ -225,10 +252,13 @@ export class ScanResult {
 				const bx = parseInt(bxStr);
 				const bz = parseInt(bzStr);
 
-
-.0				// Approximate distance using chunk coordinates
-				const cx = center.x >> (ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
-				const cz = center.z >> (ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+				0.0; // Approximate distance using chunk coordinates
+				const cx =
+					center.x >>
+					(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+				const cz =
+					center.z >>
+					(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
 
 				const distA = (ax - cx) ** 2 + (az - cz) ** 2;
 				const distB = (bx - cx) ** 2 + (bz - cz) ** 2;
@@ -251,8 +281,10 @@ export class ScanResult {
 						const localX = i & ScanResult.CHUNK_MASK;
 						const localZ = i >> ScanResult.CHUNK_SHIFT;
 
-						const cellX = (chunkX << ScanResult.CHUNK_SHIFT) + localX;
-						const cellZ = (chunkZ << ScanResult.CHUNK_SHIFT) + localZ;
+						const cellX =
+							(chunkX << ScanResult.CHUNK_SHIFT) + localX;
+						const cellZ =
+							(chunkZ << ScanResult.CHUNK_SHIFT) + localZ;
 						const x = cellX << ScanResult.CELL_SHIFT;
 						const z = cellZ << ScanResult.CELL_SHIFT;
 						const pos = { x, y, z };
@@ -334,7 +366,7 @@ export class BFSScanner {
 	public *scan(
 		dimension: Dimension,
 		config: ScanConfig,
-		existingResult?: ScanResult
+		existingResult?: ScanResult,
 	): Generator<void, ScanResult, void> {
 		const {
 			center,
@@ -369,9 +401,11 @@ export class BFSScanner {
 		};
 
 		// Start at center, aligned to cell grid
-		const startX = Math.floor(center.x / ScanResult.CELL_SIZE) * ScanResult.CELL_SIZE;
+		const startX =
+			Math.floor(center.x / ScanResult.CELL_SIZE) * ScanResult.CELL_SIZE;
 		const startY = Math.floor(center.y);
-		const startZ = Math.floor(center.z / ScanResult.CELL_SIZE) * ScanResult.CELL_SIZE;
+		const startZ =
+			Math.floor(center.z / ScanResult.CELL_SIZE) * ScanResult.CELL_SIZE;
 
 		pushToQueue(startX, startY, startZ);
 
@@ -437,7 +471,17 @@ export class BFSScanner {
 				this.tempPos.z = cz;
 
 				// Geometry Check (Fastest)
-				if (!this.isWithinShape(cx, cy, cz, center, shape, geometryDimensions, rSq)) {
+				if (
+					!this.isWithinShape(
+						cx,
+						cy,
+						cz,
+						center,
+						shape,
+						geometryDimensions,
+						rSq,
+					)
+				) {
 					continue;
 				}
 
@@ -473,7 +517,17 @@ export class BFSScanner {
 					const nz = cz + dir.z;
 
 					// Check geometry for neighbors before adding to queue to save iterations
-					if (!this.isWithinShape(nx, ny, nz, center, shape, geometryDimensions, rSq)) {
+					if (
+						!this.isWithinShape(
+							nx,
+							ny,
+							nz,
+							center,
+							shape,
+							geometryDimensions,
+							rSq,
+						)
+					) {
 						continue;
 					}
 
@@ -500,7 +554,7 @@ export class BFSScanner {
 		center: Vector3,
 		shape: ScanShape,
 		dims: Vector3,
-		rSq: number
+		rSq: number,
 	): boolean {
 		const dx = x - center.x;
 		const dy = y - center.y;
@@ -508,7 +562,11 @@ export class BFSScanner {
 
 		switch (shape) {
 			case "cube":
-				return Math.abs(dx) <= dims.x && Math.abs(dy) <= dims.y && Math.abs(dz) <= dims.z;
+				return (
+					Math.abs(dx) <= dims.x &&
+					Math.abs(dy) <= dims.y &&
+					Math.abs(dz) <= dims.z
+				);
 			case "sphere":
 				return dx * dx + dy * dy + dz * dz <= rSq;
 			case "cylinder":
