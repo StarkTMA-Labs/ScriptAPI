@@ -20,9 +20,5 @@
 	],
 	"publishConfig": {
 		"access": "public"
-	},
-	"dependencies": {
-		"@minecraft/server": "^2.4.0",
-		"@minecraft/vanilla-data": "^1.21.130"
 	}
 }
