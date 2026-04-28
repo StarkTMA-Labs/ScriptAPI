@@ -36,18 +36,27 @@ class DatabaseManager {
 	 */
 	addJSONDatabase(databaseName: string, database: object) {
 		const jsonString = JSON.stringify(database);
-		const existingProp = this.target.getDynamicProperty(databaseName) as string | undefined;
+		const existingProp = this.target.getDynamicProperty(databaseName) as
+			| string
+			| undefined;
 		let existingChunks = 0;
 
 		if (existingProp) {
 			try {
 				const propObj = JSON.parse(existingProp);
-				if (propObj && typeof propObj === "object" && DatabaseManager.CHUNK_KEY in propObj) {
+				if (
+					propObj &&
+					typeof propObj === "object" &&
+					DatabaseManager.CHUNK_KEY in propObj
+				) {
 					existingChunks = propObj[DatabaseManager.CHUNK_KEY];
 				}
 			} catch {}
 		}
-		if (jsonString.length <= DatabaseManager.DYNAMIC_PROP_MAX_LENGTH || jsonString.length === 0) {
+		if (
+			jsonString.length <= DatabaseManager.DYNAMIC_PROP_MAX_LENGTH ||
+			jsonString.length === 0
+		) {
 			if (existingChunks > 0) {
 				for (let i = 0; i < existingChunks; i++) {
 					const partName = `${databaseName}_${i}`;
@@ -81,11 +90,17 @@ class DatabaseManager {
 	 * @param databaseName The name of the database.
 	 */
 	removeJSONDatabase(databaseName: string) {
-		const propString = this.target.getDynamicProperty(databaseName) as string | undefined;
+		const propString = this.target.getDynamicProperty(databaseName) as
+			| string
+			| undefined;
 		if (propString !== undefined) {
 			try {
 				const propObj = JSON.parse(propString);
-				if (propObj && typeof propObj === "object" && DatabaseManager.CHUNK_KEY in propObj) {
+				if (
+					propObj &&
+					typeof propObj === "object" &&
+					DatabaseManager.CHUNK_KEY in propObj
+				) {
 					const chunkCount = propObj[DatabaseManager.CHUNK_KEY];
 					for (let i = 0; i < chunkCount; i++) {
 						const partName = `${databaseName}_${i}`;
@@ -104,18 +119,26 @@ class DatabaseManager {
 	 * @throws An error if the database does not exist.
 	 */
 	getJSONDatabase(databaseName: string) {
-		const propString = this.target.getDynamicProperty(databaseName) as string | undefined;
+		const propString = this.target.getDynamicProperty(databaseName) as
+			| string
+			| undefined;
 		if (propString === undefined) {
 			throw new Error("Database does not exist");
 		}
 		try {
 			const propObj = JSON.parse(propString);
-			if (propObj && typeof propObj === "object" && DatabaseManager.CHUNK_KEY in propObj) {
+			if (
+				propObj &&
+				typeof propObj === "object" &&
+				DatabaseManager.CHUNK_KEY in propObj
+			) {
 				const chunkCount: number = propObj[DatabaseManager.CHUNK_KEY];
 				let combined = "";
 				for (let i = 0; i < chunkCount; i++) {
 					const partName = `${databaseName}_${i}`;
-					const part = this.target.getDynamicProperty(partName) as string | undefined;
+					const part = this.target.getDynamicProperty(partName) as
+						| string
+						| undefined;
 					if (typeof part === "string") {
 						combined += part;
 					} else {
@@ -157,8 +180,8 @@ class SimpleDatabase<T extends SimpleObject> {
 
 	private pendingChanges = 0;
 
-	private static readonly SAVE_INTERVAL = 20 * 5;
-	private static readonly SAVE_THRESHOLD = 20;
+	protected SAVE_INTERVAL = 20 * 5;
+	protected SAVE_THRESHOLD = 20;
 
 	protected databaseName: string;
 
@@ -167,9 +190,21 @@ class SimpleDatabase<T extends SimpleObject> {
 	 * @param databaseName The name of the database.
 	 * @param target The target entity to store the database in. If undefined, the database is stored in the world.
 	 */
-	protected constructor(databaseName: string, target?: Entity | undefined) {
+	protected constructor(
+		databaseName: string,
+		target?: Entity | undefined,
+		saveThreshold?: number,
+		saveInterval?: number,
+	) {
 		this.databaseName = `${getNamespace()}:${databaseName}`;
 		this.mainDB = new DatabaseManager(target);
+
+		if (saveThreshold !== undefined) {
+			this.SAVE_THRESHOLD = saveThreshold;
+		}
+		if (saveInterval !== undefined) {
+			this.SAVE_INTERVAL = saveInterval;
+		}
 
 		if (this.mainDB.hasJSONDatabase(this.databaseName)) {
 			this.localDB = this.getMainDB();
@@ -179,10 +214,10 @@ class SimpleDatabase<T extends SimpleObject> {
 		}
 
 		system.runTimeout(() => {
-			if (this.pendingChanges > SimpleDatabase.SAVE_THRESHOLD) {
+			if (this.pendingChanges > this.SAVE_THRESHOLD) {
 				this.save();
 			}
-		}, SimpleDatabase.SAVE_INTERVAL);
+		}, this.SAVE_INTERVAL);
 
 		system.beforeEvents.shutdown.subscribe(() => {
 			system.run(() => this.save());

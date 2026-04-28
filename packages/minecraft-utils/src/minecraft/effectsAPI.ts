@@ -29,7 +29,7 @@ interface EffectObject extends SimpleObject {
 
 class EffectDatabase extends SimpleDatabase<EffectObject> {
 	constructor(entity: Entity) {
-		super("effects", entity);
+		super("effects", entity, 1);
 	}
 }
 
@@ -45,7 +45,12 @@ interface PotionConfig {
 	effectKey: string;
 	namespace: string;
 	effectId: number;
-	handler: (entity: Entity, amplifier: number, duration: number, color: RGBA) => void;
+	handler: (
+		entity: Entity,
+		amplifier: number,
+		duration: number,
+		color: RGBA,
+	) => void;
 	splashRange?: number;
 	lingeringMaxRadius?: number;
 	lingeringLifetime?: number;
@@ -70,7 +75,12 @@ interface AreaEffectCloud {
 	createdTick: number;
 	maxLifetime: number;
 	affectedEntities: Set<string>;
-	handler: (entity: Entity, amplifier: number, duration: number, color: RGBA) => void;
+	handler: (
+		entity: Entity,
+		amplifier: number,
+		duration: number,
+		color: RGBA,
+	) => void;
 }
 
 // ============================= EffectManager =================================
@@ -127,7 +137,9 @@ class EffectManager {
 			const effects = this.getAllEffects(player);
 
 			if (effects.length === 0) {
-				player.onScreenDisplay.setActionBar("§8[§7Effects§8] §7No active effects");
+				player.onScreenDisplay.setActionBar(
+					"§8[§7Effects§8] §7No active effects",
+				);
 				continue;
 			}
 
@@ -139,7 +151,9 @@ class EffectManager {
 				}
 			}
 
-			const sorted = Array.from(effectMap.values()).sort((a, b) => b.duration - a.duration);
+			const sorted = Array.from(effectMap.values()).sort(
+				(a, b) => b.duration - a.duration,
+			);
 			const display = sorted.map((effect) => {
 				const seconds = Math.ceil(effect.duration / 20);
 				const minutes = Math.floor(seconds / 60);
@@ -148,17 +162,30 @@ class EffectManager {
 					seconds > 60
 						? `§a${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
 						: seconds > 10
-						? `§e${seconds}s`
-						: `§c${seconds}s`;
+							? `§e${seconds}s`
+							: `§c${seconds}s`;
 				const name = effect.effectType
 					.split("_")
 					.map((w) => w.charAt(0).toUpperCase() + w.slice(1))
 					.join(" ");
 				const amp =
-					["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"][effect.amplifier] || effect.amplifier + 1;
+					[
+						"I",
+						"II",
+						"III",
+						"IV",
+						"V",
+						"VI",
+						"VII",
+						"VIII",
+						"IX",
+						"X",
+					][effect.amplifier] || effect.amplifier + 1;
 				return `§6${name}§r §7${amp}§r §8(${timeString}§8)§r`;
 			});
-			player.onScreenDisplay.setActionBar(`§8[§bActive Effects§8]§r\n${display.join("\n")}`);
+			player.onScreenDisplay.setActionBar(
+				`§8[§bActive Effects§8]§r\n${display.join("\n")}`,
+			);
 		}
 	}
 
@@ -167,8 +194,17 @@ class EffectManager {
 	registerEffect(config: EffectConfig) {
 		this.effectConfigs.set(config.effectType, config);
 		return {
-			addEffect: (entity: Entity, amplifier: number, durationTicks: number) => {
-				this.addEffect(entity, config.effectType, amplifier, durationTicks);
+			addEffect: (
+				entity: Entity,
+				amplifier: number,
+				durationTicks: number,
+			) => {
+				this.addEffect(
+					entity,
+					config.effectType,
+					amplifier,
+					durationTicks,
+				);
 			},
 			removeEffect: (entity: Entity) => {
 				this.removeEffect(entity, config.effectType);
@@ -177,7 +213,12 @@ class EffectManager {
 		};
 	}
 
-	addEffect(entity: Entity, effectType: string, amplifier: number, duration: number): void {
+	addEffect(
+		entity: Entity,
+		effectType: string,
+		amplifier: number,
+		duration: number,
+	): void {
 		const config = this.effectConfigs.get(effectType);
 		const db = this.getEntityDatabase(entity);
 		const existing = db.getObject(effectType);
@@ -201,7 +242,10 @@ class EffectManager {
 			// Play start sound only for new effects
 			if (!existing && config?.sounds?.start) {
 				try {
-					entity.dimension.playSound(config.sounds.start, entity.location);
+					entity.dimension.playSound(
+						config.sounds.start,
+						entity.location,
+					);
 				} catch {}
 			}
 		}
@@ -246,7 +290,10 @@ class EffectManager {
 			const config = this.effectConfigs.get(effect.effectType);
 			if (config?.sounds?.end) {
 				try {
-					entity.dimension.playSound(config.sounds.end, entity.location);
+					entity.dimension.playSound(
+						config.sounds.end,
+						entity.location,
+					);
 				} catch {}
 			}
 		}
@@ -277,7 +324,10 @@ class EffectManager {
 			lingeringDurationMultiplier: 0.25,
 			...config,
 		};
-		this.potionConfigs.set(`${config.namespace}:${config.effectKey}`, fullConfig);
+		this.potionConfigs.set(
+			`${config.namespace}:${config.effectKey}`,
+			fullConfig,
+		);
 		return { handler: config.handler };
 	}
 
@@ -287,22 +337,34 @@ class EffectManager {
 		if (startup) {
 			for (const [, config] of this.potionConfigs.entries()) {
 				const componentId = `${config.namespace}:${config.effectKey}_potion_effect`;
-				startup.itemComponentRegistry.registerCustomComponent(componentId, {
-					onConsume: (event, params) => {
-						const p = params.params as PotionItemParams;
-						const color: RGBA = {
-							red: p.potion_color[0],
-							green: p.potion_color[1],
-							blue: p.potion_color[2],
-							alpha: p.potion_color[3],
-						};
-						config.handler(event.source, p.amplifier, p.duration * 20, color);
+				startup.itemComponentRegistry.registerCustomComponent(
+					componentId,
+					{
+						onConsume: (event, params) => {
+							const p = params.params as PotionItemParams;
+							const color: RGBA = {
+								red: p.potion_color[0],
+								green: p.potion_color[1],
+								blue: p.potion_color[2],
+								alpha: p.potion_color[3],
+							};
+							config.handler(
+								event.source,
+								p.amplifier,
+								p.duration * 20,
+								color,
+							);
+						},
 					},
-				});
+				);
 			}
 
-			world.afterEvents.projectileHitBlock.subscribe((event) => this.handleProjectileHit(event.projectile));
-			world.afterEvents.projectileHitEntity.subscribe((event) => this.handleProjectileHit(event.projectile));
+			world.afterEvents.projectileHitBlock.subscribe((event) =>
+				this.handleProjectileHit(event.projectile),
+			);
+			world.afterEvents.projectileHitEntity.subscribe((event) =>
+				this.handleProjectileHit(event.projectile),
+			);
 		}
 
 		system.runInterval(() => {
@@ -318,7 +380,9 @@ class EffectManager {
 				}
 
 				const allTags = entity.getTags();
-				const pauseEffects = allTags.filter((tag) => tag.startsWith(`starkeffects|pause_effect`));
+				const pauseEffects = allTags.filter((tag) =>
+					tag.startsWith(`starkeffects|pause_effect`),
+				);
 
 				const db = this.getEntityDatabase(entity);
 				const effects = db.getAllObjects();
@@ -349,43 +413,69 @@ class EffectManager {
 					if (!currentEffect) continue;
 
 					// Check if handler modified the duration
-					const originalDuration = originalDurations.get(effect.effectType)!;
+					const originalDuration = originalDurations.get(
+						effect.effectType,
+					)!;
 					if (currentEffect.duration !== originalDuration) {
 						// Handler modified it, skip countdown
 						continue;
 					}
 
 					// Play ambient sounds
-					if (config?.sounds?.ambient && system.currentTick % 40 === 0) {
+					if (
+						config?.sounds?.ambient &&
+						system.currentTick % 40 === 0
+					) {
 						try {
-							entity.dimension.playSound(config.sounds.ambient, entity.location, { volume: 0.5 });
+							entity.dimension.playSound(
+								config.sounds.ambient,
+								entity.location,
+								{ volume: 0.5 },
+							);
 						} catch {}
 					}
 
 					// Spawn particles
 					if (system.currentTick % 20 === 0) {
-						const loc = { ...entity.location, y: entity.location.y + 1 };
+						const loc = {
+							...entity.location,
+							y: entity.location.y + 1,
+						};
 						const variables = new MolangVariableMap();
 						variables.setColorRGBA("color", currentEffect.color);
 						try {
-							entity.dimension.spawnParticle(config?.particleType || "minecraft:mobspell_emitter", loc, variables);
+							entity.dimension.spawnParticle(
+								config?.particleType ||
+									"minecraft:mobspell_emitter",
+								loc,
+								variables,
+							);
 						} catch {}
 					}
 
 					if (pauseEffects.length > 0) {
-						const excludeEffects = pauseEffects.map((tag) => tag.split("|")[2]);
-						if (!excludeEffects.includes(effect.effectType)) continue;
+						const excludeEffects = pauseEffects.map(
+							(tag) => tag.split("|")[2],
+						);
+						if (!excludeEffects.includes(effect.effectType))
+							continue;
 					}
 
 					// Countdown duration
 					const newDuration = currentEffect.duration - 1;
 					if (newDuration > 0) {
-						db.updateObject({ ...currentEffect, duration: newDuration });
+						db.updateObject({
+							...currentEffect,
+							duration: newDuration,
+						});
 					} else {
 						db.removeObject(effect.effectType);
 						if (config?.sounds?.end) {
 							try {
-								entity.dimension.playSound(config.sounds.end, entity.location);
+								entity.dimension.playSound(
+									config.sounds.end,
+									entity.location,
+								);
 							} catch {}
 						}
 					}
@@ -406,7 +496,8 @@ class EffectManager {
 		// Track entities that spawn with active effects
 		world.afterEvents.entitySpawn.subscribe((event) => {
 			if (!event.entity || !event.entity.isValid) return;
-			if (event.entity.hasComponent(EntityItemComponent.componentId)) return;
+			if (event.entity.hasComponent(EntityItemComponent.componentId))
+				return;
 
 			if (this.hasActiveEffects(event.entity)) {
 				this.trackedEntities.set(event.entity.id, event.entity);
@@ -447,12 +538,17 @@ class EffectManager {
 		const configs = Array.from(this.potionConfigs.values());
 
 		for (const config of configs) {
-			if (projectile.typeId !== `${config.namespace}:potion_projectile`) continue;
+			if (projectile.typeId !== `${config.namespace}:potion_projectile`)
+				continue;
 
-			const effectId = projectile.getProperty(`${config.namespace}:effect_id`) as number;
+			const effectId = projectile.getProperty(
+				`${config.namespace}:effect_id`,
+			) as number;
 			if (effectId !== config.effectId) continue;
 
-			const potionType = projectile.getProperty(`${config.namespace}:type`) as number;
+			const potionType = projectile.getProperty(
+				`${config.namespace}:type`,
+			) as number;
 
 			if (potionType === 1) {
 				this.handleSplash(projectile, config);
@@ -466,16 +562,27 @@ class EffectManager {
 	}
 
 	private handleSplash(projectile: Entity, config: PotionConfig): void {
-		const location = { ...projectile.location, y: projectile.location.y + 0.1 };
+		const location = {
+			...projectile.location,
+			y: projectile.location.y + 0.1,
+		};
 		const color = this.getColorFromEntity(projectile, config.namespace);
-		const amplifier = projectile.getProperty(`${config.namespace}:amplifier`) as number;
-		const duration = (projectile.getProperty(`${config.namespace}:duration`) as number) * 20;
+		const amplifier = projectile.getProperty(
+			`${config.namespace}:amplifier`,
+		) as number;
+		const duration =
+			(projectile.getProperty(`${config.namespace}:duration`) as number) *
+			20;
 
 		const variables = new MolangVariableMap();
 		variables.setFloat("splash_range", config.splashRange!);
 		variables.setFloat("splash_power", 1);
 		variables.setColorRGBA("color", color);
-		projectile.dimension.spawnParticle("minecraft:splash_spell_emitter", location, variables);
+		projectile.dimension.spawnParticle(
+			"minecraft:splash_spell_emitter",
+			location,
+			variables,
+		);
 
 		const nearbyEntities = projectile.dimension.getEntities({
 			excludeTypes: ["minecraft:item", "minecraft:arrow"],
@@ -493,10 +600,17 @@ class EffectManager {
 	}
 
 	private handleLingering(projectile: Entity, config: PotionConfig): void {
-		const location = { ...projectile.location, y: projectile.location.y + 0.1 };
+		const location = {
+			...projectile.location,
+			y: projectile.location.y + 0.1,
+		};
 		const color = this.getColorFromEntity(projectile, config.namespace);
-		const amplifier = projectile.getProperty(`${config.namespace}:amplifier`) as number;
-		const duration = (projectile.getProperty(`${config.namespace}:duration`) as number) * 20;
+		const amplifier = projectile.getProperty(
+			`${config.namespace}:amplifier`,
+		) as number;
+		const duration =
+			(projectile.getProperty(`${config.namespace}:duration`) as number) *
+			20;
 
 		const cloud: AreaEffectCloud = {
 			id: `aoe_cloud_${this.cloudIdCounter++}`,
@@ -532,22 +646,38 @@ class EffectManager {
 		const variables = new MolangVariableMap();
 		variables.setFloat("cloud_lifetime", cloud.maxLifetime / 20);
 		variables.setFloat("cloud_radius", cloud.currentRadius);
-		variables.setFloat("particle_multiplier", cloud.currentRadius / cloud.maxRadius);
+		variables.setFloat(
+			"particle_multiplier",
+			cloud.currentRadius / cloud.maxRadius,
+		);
 		variables.setColorRGBA("color", cloud.color);
-		dimension.spawnParticle("minecraft:mobspell_lingering", cloud.location, variables);
+		dimension.spawnParticle(
+			"minecraft:mobspell_lingering",
+			cloud.location,
+			variables,
+		);
 
 		if (age < 20) return;
 
 		const nearbyEntities = dimension.getEntities({
 			location: cloud.location,
 			maxDistance: cloud.currentRadius + 1,
-			excludeTypes: ["minecraft:item", "minecraft:arrow", "minecraft:xp_orb"],
+			excludeTypes: [
+				"minecraft:item",
+				"minecraft:arrow",
+				"minecraft:xp_orb",
+			],
 		});
 
 		for (const entity of nearbyEntities) {
 			if (cloud.affectedEntities.has(entity.id)) continue;
 
-			cloud.handler(entity, cloud.amplifier, Math.floor(cloud.duration), cloud.color);
+			cloud.handler(
+				entity,
+				cloud.amplifier,
+				Math.floor(cloud.duration),
+				cloud.color,
+			);
 			cloud.currentRadius = Math.max(0, cloud.currentRadius - 0.5);
 			cloud.maxLifetime = Math.max(0, cloud.maxLifetime - 100);
 			cloud.affectedEntities.add(entity.id);
@@ -570,4 +700,10 @@ class EffectManager {
 
 const effectManager = EffectManager.getInstance();
 
-export { EffectManager, effectManager, EffectObject, EffectConfig, PotionConfig };
+export {
+	EffectManager,
+	effectManager,
+	EffectObject,
+	EffectConfig,
+	PotionConfig,
+};
