@@ -213,7 +213,7 @@ class SimpleDatabase<T extends SimpleObject> {
 			this.save();
 		}
 
-		system.runTimeout(() => {
+		system.runInterval(() => {
 			if (this.pendingChanges > this.SAVE_THRESHOLD) {
 				this.save();
 			}

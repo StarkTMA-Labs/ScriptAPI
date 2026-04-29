@@ -1,9 +1,6 @@
 import {
-	CustomComponentParameters,
-	Dimension,
 	Entity,
 	EntityItemComponent,
-	ItemComponentConsumeEvent,
 	MolangVariableMap,
 	Player,
 	RGBA,
@@ -12,7 +9,10 @@ import {
 	Vector3,
 	world,
 } from "@minecraft/server";
-import { MinecraftItemTypes } from "@minecraft/vanilla-data";
+import {
+	MinecraftDimensionTypes,
+	MinecraftItemTypes,
+} from "@minecraft/vanilla-data";
 import { getNamespace } from "../constants";
 import { SimpleDatabase, SimpleObject } from "../database";
 
@@ -29,7 +29,7 @@ interface EffectObject extends SimpleObject {
 
 class EffectDatabase extends SimpleDatabase<EffectObject> {
 	constructor(entity: Entity) {
-		super("effects", entity, 1);
+		super("effects", entity, 1, 1);
 	}
 }
 
@@ -238,6 +238,7 @@ class EffectManager {
 				color: config?.color || { red: 1, green: 1, blue: 1, alpha: 1 },
 			};
 			db.updateObject(effect);
+			db.forceSave();
 
 			// Play start sound only for new effects
 			if (!existing && config?.sounds?.start) {
@@ -261,6 +262,7 @@ class EffectManager {
 
 		// Remove from database
 		db.removeObject(effectType);
+		db.forceSave();
 
 		// Play end sound only if effect existed
 		if (hasEffect && config?.sounds?.end) {
@@ -300,6 +302,7 @@ class EffectManager {
 
 		// Clear database and untrack
 		db.eraseAllObjects();
+		db.forceSave();
 		this.entityDatabases.delete(entity.id);
 		this.trackedEntities.delete(entity.id);
 	}
@@ -366,11 +369,58 @@ class EffectManager {
 				this.handleProjectileHit(event.projectile),
 			);
 		}
+		// Track entities that spawn with active effects
+		world.afterEvents.entitySpawn.subscribe((event) => {
+			if (!event.entity || !event.entity.isValid) return;
+			if (event.entity.hasComponent(EntityItemComponent.componentId))
+				return;
+
+			if (this.hasActiveEffects(event.entity)) {
+				this.trackedEntities.set(event.entity.id, event.entity);
+			}
+		});
+
+		world.afterEvents.entityLoad.subscribe((event) => {
+			if (!event.entity || !event.entity.isValid) return;
+			if (event.entity.hasComponent(EntityItemComponent.componentId))
+				return;
+
+			if (this.hasActiveEffects(event.entity)) {
+				this.trackedEntities.set(event.entity.id, event.entity);
+			}
+		});
+
+		world.afterEvents.playerJoin.subscribe((event) => {
+			const player = world.getEntity(event.playerId) as Player;
+			if (player && this.hasActiveEffects(player)) {
+				this.trackedEntities.set(player.id, player);
+			}
+		});
+
+		// Clean up when entities die
+		world.afterEvents.entityDie.subscribe((event) => {
+			this.entityDatabases.delete(event.deadEntity.id);
+			this.trackedEntities.delete(event.deadEntity.id);
+		});
+
+		world.afterEvents.itemCompleteUse.subscribe((event) => {
+			if (event.itemStack.typeId === MinecraftItemTypes.MilkBucket) {
+				this.removeAllEffects(event.source);
+			}
+		});
+
+		world.afterEvents.worldLoad.subscribe(() => {
+			world.getAllPlayers().forEach((player) => {
+				if (this.hasActiveEffects(player)) {
+					this.trackedEntities.set(player.id, player);
+				}
+			});
+		});
 
 		system.runInterval(() => {
-			//if (debug) {
-			//	this.debug();
-			//}
+			if (debug) {
+				this.debug();
+			}
 			// Process effects on tracked entities only
 			for (const [entityId, entity] of this.trackedEntities.entries()) {
 				if (!entity.isValid) {
@@ -470,6 +520,7 @@ class EffectManager {
 						});
 					} else {
 						db.removeObject(effect.effectType);
+						db.forceSave();
 						if (config?.sounds?.end) {
 							try {
 								entity.dimension.playSound(
@@ -492,44 +543,6 @@ class EffectManager {
 				this.updateCloud(cloud);
 			}
 		}, 1);
-
-		// Track entities that spawn with active effects
-		world.afterEvents.entitySpawn.subscribe((event) => {
-			if (!event.entity || !event.entity.isValid) return;
-			if (event.entity.hasComponent(EntityItemComponent.componentId))
-				return;
-
-			if (this.hasActiveEffects(event.entity)) {
-				this.trackedEntities.set(event.entity.id, event.entity);
-			}
-		});
-
-		world.afterEvents.playerJoin.subscribe((event) => {
-			const player = world.getEntity(event.playerId) as Player;
-			if (this.hasActiveEffects(player)) {
-				this.trackedEntities.set(player.id, player);
-			}
-		});
-
-		// Clean up when entities die
-		world.afterEvents.entityDie.subscribe((event) => {
-			this.entityDatabases.delete(event.deadEntity.id);
-			this.trackedEntities.delete(event.deadEntity.id);
-		});
-
-		world.afterEvents.itemCompleteUse.subscribe((event) => {
-			if (event.itemStack.typeId === MinecraftItemTypes.MilkBucket) {
-				this.removeAllEffects(event.source);
-			}
-		});
-
-		world.afterEvents.worldLoad.subscribe(() => {
-			world.getAllPlayers().forEach((player) => {
-				if (this.hasActiveEffects(player)) {
-					this.trackedEntities.set(player.id, player);
-				}
-			});
-		});
 	}
 
 	// ============================= Potion Projectiles ========================
