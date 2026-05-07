@@ -80,9 +80,9 @@ export class ScanResult {
 
 		let chunk = this.chunks.get(key);
 		if (!chunk) {
-			chunk = new Int32Array(
-				ScanResult.CHUNK_SIZE * ScanResult.CHUNK_SIZE,
-			).fill(ScanResult.SENTINEL);
+			chunk = new Int32Array(ScanResult.CHUNK_SIZE * ScanResult.CHUNK_SIZE).fill(
+				ScanResult.SENTINEL,
+			);
 			this.chunks.set(key, chunk);
 		}
 
@@ -158,8 +158,7 @@ export class ScanResult {
 			// Radius in blocks -> Radius in chunks?
 			// Max radius in blocks.
 			// Chunk size in blocks = 16 * 8 = 128.
-			const chunkSizeInBlocks =
-				ScanResult.CHUNK_SIZE * ScanResult.CELL_SIZE;
+			const chunkSizeInBlocks = ScanResult.CHUNK_SIZE * ScanResult.CELL_SIZE;
 			const minChunkX =
 				(center.x - maxRadius) >>
 				(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
@@ -197,21 +196,15 @@ export class ScanResult {
 				const chunkZ = parseInt(chunkZStr);
 
 				for (let i = 0; i < 5; i++) {
-					const localX = Math.floor(
-						Math.random() * ScanResult.CHUNK_SIZE,
-					);
-					const localZ = Math.floor(
-						Math.random() * ScanResult.CHUNK_SIZE,
-					);
+					const localX = Math.floor(Math.random() * ScanResult.CHUNK_SIZE);
+					const localZ = Math.floor(Math.random() * ScanResult.CHUNK_SIZE);
 					const index = (localZ << ScanResult.CHUNK_SHIFT) | localX;
 					const y = chunk[index];
 
 					if (y !== ScanResult.SENTINEL) {
 						// Convert back to world coordinates (first coordinate of the cell)
-						const cellX =
-							(chunkX << ScanResult.CHUNK_SHIFT) + localX;
-						const cellZ =
-							(chunkZ << ScanResult.CHUNK_SHIFT) + localZ;
+						const cellX = (chunkX << ScanResult.CHUNK_SHIFT) + localX;
+						const cellZ = (chunkZ << ScanResult.CHUNK_SHIFT) + localZ;
 						const x = cellX << ScanResult.CELL_SHIFT;
 						const z = cellZ << ScanResult.CELL_SHIFT;
 						const pos = { x, y, z };
@@ -253,12 +246,8 @@ export class ScanResult {
 				const bz = parseInt(bzStr);
 
 				0.0; // Approximate distance using chunk coordinates
-				const cx =
-					center.x >>
-					(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
-				const cz =
-					center.z >>
-					(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+				const cx = center.x >> (ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+				const cz = center.z >> (ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
 
 				const distA = (ax - cx) ** 2 + (az - cz) ** 2;
 				const distB = (bx - cx) ** 2 + (bz - cz) ** 2;
@@ -281,10 +270,8 @@ export class ScanResult {
 						const localX = i & ScanResult.CHUNK_MASK;
 						const localZ = i >> ScanResult.CHUNK_SHIFT;
 
-						const cellX =
-							(chunkX << ScanResult.CHUNK_SHIFT) + localX;
-						const cellZ =
-							(chunkZ << ScanResult.CHUNK_SHIFT) + localZ;
+						const cellX = (chunkX << ScanResult.CHUNK_SHIFT) + localX;
+						const cellZ = (chunkZ << ScanResult.CHUNK_SHIFT) + localZ;
 						const x = cellX << ScanResult.CELL_SHIFT;
 						const z = cellZ << ScanResult.CELL_SHIFT;
 						const pos = { x, y, z };
@@ -409,14 +396,18 @@ export class BFSScanner {
 
 		pushToQueue(startX, startY, startZ);
 
-		// Optimization: Use a Map<number, Set<number>> for visited coordinates
-		// Key: (cellX & 0xffff) | ((cellZ & 0xffff) << 16), Value: Set of y coordinates
+		// Visited set using coordinates relative to the scan origin to avoid
+		// hash collisions when the scan center is far from world origin.
+		// Key: (relCellX & 0xfffff) | ((relCellZ & 0xfffff) * 0x100000)
+		// Supports relative ranges of ±524287 cells (±4M blocks), safe for any Minecraft world.
+		const startCellX = startX >> 3;
+		const startCellZ = startZ >> 3;
 		const visitedXZ = new Map<number, Set<number>>();
 
 		const markVisited = (x: number, y: number, z: number) => {
-			const cellX = x >> 3; // Divide by 8
-			const cellZ = z >> 3;
-			const key = (cellX & 0xffff) | ((cellZ & 0xffff) << 16);
+			const relX = (x >> 3) - startCellX;
+			const relZ = (z >> 3) - startCellZ;
+			const key = (relX & 0xfffff) | ((relZ & 0xfffff) * 0x100000);
 			let ySet = visitedXZ.get(key);
 			if (!ySet) {
 				ySet = new Set();
@@ -426,9 +417,9 @@ export class BFSScanner {
 		};
 
 		const isVisited = (x: number, y: number, z: number): boolean => {
-			const cellX = x >> 3;
-			const cellZ = z >> 3;
-			const key = (cellX & 0xffff) | ((cellZ & 0xffff) << 16);
+			const relX = (x >> 3) - startCellX;
+			const relZ = (z >> 3) - startCellZ;
+			const key = (relX & 0xfffff) | ((relZ & 0xfffff) * 0x100000);
 			const ySet = visitedXZ.get(key);
 			return ySet ? ySet.has(y) : false;
 		};
@@ -541,10 +532,6 @@ export class BFSScanner {
 		// console.warn(`Scan finished. Iterations: ${iterations}, Queue: ${qTail/3}, Result Chunks: ${result['chunks'].size}`);
 
 		return result;
-	}
-
-	private getCoordKey(x: number, y: number, z: number): string {
-		return `${x},${y},${z}`;
 	}
 
 	private isWithinShape(
