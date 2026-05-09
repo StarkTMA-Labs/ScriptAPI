@@ -534,6 +534,133 @@ export class BFSScanner {
 		return result;
 	}
 
+	/**
+	 * Finds an obstacle-free path from `start` to `goal` using A* over the
+	 * in-memory `ScanResult`.  Only cells already confirmed as open water by
+	 * the BFS scan are used — no block reads are performed.
+	 *
+	 * @param start  World position of the ship.
+	 * @param goal   Desired destination (should come from `ScanResult.getRandomPosition`).
+	 * @param result The scanned surface data to navigate over.
+	 * @param maxNodes Maximum A* nodes to expand before giving up. Defaults to 1500.
+	 * @returns An ordered `Vector3[]` of waypoints (turn-points + goal, start excluded),
+	 *          or `undefined` if no path exists within `maxNodes`.
+	 */
+	public findPath(
+		start: Vector3,
+		goal: Vector3,
+		result: ScanResult,
+		maxNodes: number = 1500,
+	): Vector3[] | undefined {
+		const cs = ScanResult.CELL_SIZE;
+
+		// Align both positions to the 8-block cell grid.
+		const startX = Math.floor(start.x / cs) * cs;
+		const startZ = Math.floor(start.z / cs) * cs;
+		const goalX = Math.floor(goal.x / cs) * cs;
+		const goalZ = Math.floor(goal.z / cs) * cs;
+
+		// Goal must be a confirmed water cell in the scan result.
+		if (!result.hasHeight(goalX, goalZ)) return undefined;
+
+		// Already on the goal cell.
+		if (startX === goalX && startZ === goalZ) {
+			const y = result.getHeight(goalX, goalZ) ?? goal.y;
+			return [{ x: goalX, y, z: goalZ }];
+		}
+
+		const toKey = (x: number, z: number) => `${x},${z}`;
+		const startKey = toKey(startX, startZ);
+		const goalKey = toKey(goalX, goalZ);
+
+		// Manhattan heuristic (admissible for 4-directional uniform-cost grid).
+		const heuristic = (x: number, z: number) =>
+			(Math.abs(x - goalX) + Math.abs(z - goalZ)) / cs;
+
+		type AStarNode = { x: number; z: number; f: number; g: number };
+		const openSet: AStarNode[] = [];
+		const gScore = new Map<string, number>();
+		const cameFrom = new Map<string, string>();
+		const closed = new Set<string>();
+
+		gScore.set(startKey, 0);
+		openSet.push({ x: startX, z: startZ, g: 0, f: heuristic(startX, startZ) });
+
+		let nodesExpanded = 0;
+
+		while (openSet.length > 0) {
+			if (nodesExpanded++ > maxNodes) return undefined;
+
+			// Select the open node with the lowest f score (linear scan is
+			// acceptable for grids ≤ 1500 nodes).
+			let bestIdx = 0;
+			for (let i = 1; i < openSet.length; i++) {
+				if (openSet[i].f < openSet[bestIdx].f) bestIdx = i;
+			}
+			const current = openSet.splice(bestIdx, 1)[0];
+
+			const ck = toKey(current.x, current.z);
+			if (closed.has(ck)) continue;
+			closed.add(ck);
+
+			if (ck === goalKey) {
+				// Reconstruct path: walk cameFrom backwards (excludes start, includes goal).
+				const path: Vector3[] = [];
+				let node = goalKey;
+				while (cameFrom.has(node)) {
+					const [px, pz] = node.split(",").map(Number);
+					const y = result.getHeight(px, pz) ?? goal.y;
+					path.push({ x: px, y, z: pz });
+					node = cameFrom.get(node)!;
+				}
+				path.reverse();
+
+				if (path.length <= 2) return path;
+
+				// Simplify: keep only waypoints where the direction changes (turn points).
+				const simplified: Vector3[] = [path[0]];
+				for (let i = 1; i < path.length - 1; i++) {
+					const prev = simplified[simplified.length - 1];
+					const curr = path[i];
+					const next = path[i + 1];
+					if (
+						Math.sign(curr.x - prev.x) !== Math.sign(next.x - curr.x) ||
+						Math.sign(curr.z - prev.z) !== Math.sign(next.z - curr.z)
+					) {
+						simplified.push(curr);
+					}
+				}
+				simplified.push(path[path.length - 1]);
+				return simplified;
+			}
+
+			// Expand 4-directional neighbours at CELL_SIZE (8-block) intervals.
+			for (const dir of this.directions) {
+				const nx = current.x + dir.x;
+				const nz = current.z + dir.z;
+				const nk = toKey(nx, nz);
+
+				if (closed.has(nk)) continue;
+
+				// Neighbour must be a confirmed water cell.
+				// (The start node is exempt — the ship is physically there even if the
+				//  BFS did not capture that exact cell.)
+				if (!result.hasHeight(nx, nz)) continue;
+
+				const ng = current.g + 1;
+				const existing = gScore.get(nk);
+				if (existing !== undefined && existing <= ng) continue;
+
+				gScore.set(nk, ng);
+				cameFrom.set(nk, ck);
+				openSet.push({ x: nx, z: nz, g: ng, f: ng + heuristic(nx, nz) });
+			}
+		}
+
+		// No path found within the node budget.
+		return undefined;
+	}
+
 	private isWithinShape(
 		x: number,
 		y: number,
