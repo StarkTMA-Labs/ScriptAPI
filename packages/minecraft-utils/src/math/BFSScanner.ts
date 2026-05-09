@@ -543,7 +543,14 @@ export class BFSScanner {
 	 * @param goal   Desired destination (should come from `ScanResult.getRandomPosition`).
 	 * @param result The scanned surface data to navigate over.
 	 * @param maxNodes Maximum A* nodes to expand before giving up. Defaults to 1500.
-	 * @returns An ordered `Vector3[]` of waypoints (turn-points + goal, start excluded),
+	 * @param avoidBorderCells When true, rejects a goal cell that is missing any of its
+	 *        4 cardinal neighbours in the scan result (i.e. it sits on the edge of the
+	 *        scanned water area and ships could easily sail off into unscanned territory).
+	 *        Defaults to false.
+	 * @param simplify When true (default), collinear intermediate waypoints are removed
+	 *        so only turn-points and the final goal are returned.  Set to false to receive
+	 *        every 8-block cell along the path.
+	 * @returns An ordered `Vector3[]` of waypoints (start excluded),
 	 *          or `undefined` if no path exists within `maxNodes`.
 	 */
 	public findPath(
@@ -551,6 +558,8 @@ export class BFSScanner {
 		goal: Vector3,
 		result: ScanResult,
 		maxNodes: number = 1500,
+		avoidBorderCells: boolean = false,
+		simplify: boolean = true,
 	): Vector3[] | undefined {
 		const cs = ScanResult.CELL_SIZE;
 
@@ -562,6 +571,14 @@ export class BFSScanner {
 
 		// Goal must be a confirmed water cell in the scan result.
 		if (!result.hasHeight(goalX, goalZ)) return undefined;
+
+		// Optionally reject goal cells on the border of the scanned area
+		// (missing any cardinal neighbour means the ship could sail off into unknown water).
+		if (avoidBorderCells) {
+			for (const dir of this.directions) {
+				if (!result.hasHeight(goalX + dir.x, goalZ + dir.z)) return undefined;
+			}
+		}
 
 		// Already on the goal cell.
 		if (startX === goalX && startZ === goalZ) {
@@ -616,6 +633,8 @@ export class BFSScanner {
 				path.reverse();
 
 				if (path.length <= 2) return path;
+
+				if (!simplify) return path;
 
 				// Simplify: keep only waypoints where the direction changes (turn points).
 				const simplified: Vector3[] = [path[0]];
