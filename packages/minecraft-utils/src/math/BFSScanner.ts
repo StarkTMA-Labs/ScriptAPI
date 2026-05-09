@@ -572,14 +572,6 @@ export class BFSScanner {
 		// Goal must be a confirmed water cell in the scan result.
 		if (!result.hasHeight(goalX, goalZ)) return undefined;
 
-		// Optionally reject goal cells on the border of the scanned area
-		// (missing any cardinal neighbour means the ship could sail off into unknown water).
-		if (avoidBorderCells) {
-			for (const dir of this.directions) {
-				if (!result.hasHeight(goalX + dir.x, goalZ + dir.z)) return undefined;
-			}
-		}
-
 		// Already on the goal cell.
 		if (startX === goalX && startZ === goalZ) {
 			const y = result.getHeight(goalX, goalZ) ?? goal.y;
@@ -631,6 +623,24 @@ export class BFSScanner {
 					node = cameFrom.get(node)!;
 				}
 				path.reverse();
+
+				// Trim border cells from the tail so the ship stops at an interior
+				// cell rather than sailing to the very edge of the scanned area.
+				if (avoidBorderCells) {
+					while (path.length > 1) {
+						const last = path[path.length - 1];
+						let isBorder = false;
+						for (const dir of this.directions) {
+							if (!result.hasHeight(last.x + dir.x, last.z + dir.z)) {
+								isBorder = true;
+								break;
+							}
+						}
+						if (!isBorder) break;
+						path.pop();
+					}
+					if (path.length === 0) return undefined;
+				}
 
 				if (path.length <= 2) return path;
 
