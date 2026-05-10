@@ -1,4 +1,4 @@
-import { Block, Dimension, Vector3, system } from "@minecraft/server";
+import { Block, Dimension, Vector3 } from "@minecraft/server";
 
 /**
  * Defines the shape of the scanning area.
@@ -54,14 +54,17 @@ export class ScanResult {
 	private static readonly CHUNK_SHIFT = 4;
 	private static readonly SENTINEL = -2147483648;
 
-	// Cell size (8x8 blocks)
-	public static readonly CELL_SIZE = 8;
-	private static readonly CELL_SHIFT = 3; // 2^3 = 8
+	// Cell size (configurable)
+	public readonly cellSize: number;
+	private readonly cellShift: number;
 
 	// Map of chunk key "chunkX,chunkZ" -> Int32Array(256)
 	private readonly chunks: Map<string, Int32Array> = new Map();
 
-	constructor() {}
+	constructor(cellSize: number = 8) {
+		this.cellSize = cellSize;
+		this.cellShift = Math.log2(cellSize);
+	}
 
 	/**
 	 * Updates the height at the given coordinates if the new Y is higher.
@@ -71,8 +74,8 @@ export class ScanResult {
 	 */
 	public updateHeight(x: number, z: number, y: number): void {
 		// Convert world coords to cell coords
-		const cellX = x >> ScanResult.CELL_SHIFT;
-		const cellZ = z >> ScanResult.CELL_SHIFT;
+		const cellX = x >> this.cellShift;
+		const cellZ = z >> this.cellShift;
 
 		const chunkX = cellX >> ScanResult.CHUNK_SHIFT;
 		const chunkZ = cellZ >> ScanResult.CHUNK_SHIFT;
@@ -102,8 +105,8 @@ export class ScanResult {
 	 * @returns The Y coordinate, or undefined if no block was scanned at this location.
 	 */
 	public getHeight(x: number, z: number): number | undefined {
-		const cellX = x >> ScanResult.CELL_SHIFT;
-		const cellZ = z >> ScanResult.CELL_SHIFT;
+		const cellX = x >> this.cellShift;
+		const cellZ = z >> this.cellShift;
 
 		const chunkX = cellX >> ScanResult.CHUNK_SHIFT;
 		const chunkZ = cellZ >> ScanResult.CHUNK_SHIFT;
@@ -157,20 +160,14 @@ export class ScanResult {
 			// Convert center/radius to chunk coords
 			// Radius in blocks -> Radius in chunks?
 			// Max radius in blocks.
-			// Chunk size in blocks = 16 * 8 = 128.
-			const chunkSizeInBlocks = ScanResult.CHUNK_SIZE * ScanResult.CELL_SIZE;
 			const minChunkX =
-				(center.x - maxRadius) >>
-				(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+				(center.x - maxRadius) >> (ScanResult.CHUNK_SHIFT + this.cellShift);
 			const maxChunkX =
-				(center.x + maxRadius) >>
-				(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+				(center.x + maxRadius) >> (ScanResult.CHUNK_SHIFT + this.cellShift);
 			const minChunkZ =
-				(center.z - maxRadius) >>
-				(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+				(center.z - maxRadius) >> (ScanResult.CHUNK_SHIFT + this.cellShift);
 			const maxChunkZ =
-				(center.z + maxRadius) >>
-				(ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+				(center.z + maxRadius) >> (ScanResult.CHUNK_SHIFT + this.cellShift);
 
 			keys = keys.filter((key) => {
 				const [cxStr, czStr] = key.split(",");
@@ -205,8 +202,8 @@ export class ScanResult {
 						// Convert back to world coordinates (first coordinate of the cell)
 						const cellX = (chunkX << ScanResult.CHUNK_SHIFT) + localX;
 						const cellZ = (chunkZ << ScanResult.CHUNK_SHIFT) + localZ;
-						const x = cellX << ScanResult.CELL_SHIFT;
-						const z = cellZ << ScanResult.CELL_SHIFT;
+						const x = cellX << this.cellShift;
+						const z = cellZ << this.cellShift;
 						const pos = { x, y, z };
 
 						if (center && maxRadius) {
@@ -246,8 +243,8 @@ export class ScanResult {
 				const bz = parseInt(bzStr);
 
 				0.0; // Approximate distance using chunk coordinates
-				const cx = center.x >> (ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
-				const cz = center.z >> (ScanResult.CHUNK_SHIFT + ScanResult.CELL_SHIFT);
+				const cx = center.x >> (ScanResult.CHUNK_SHIFT + this.cellShift);
+				const cz = center.z >> (ScanResult.CHUNK_SHIFT + this.cellShift);
 
 				const distA = (ax - cx) ** 2 + (az - cz) ** 2;
 				const distB = (bx - cx) ** 2 + (bz - cz) ** 2;
@@ -272,8 +269,8 @@ export class ScanResult {
 
 						const cellX = (chunkX << ScanResult.CHUNK_SHIFT) + localX;
 						const cellZ = (chunkZ << ScanResult.CHUNK_SHIFT) + localZ;
-						const x = cellX << ScanResult.CELL_SHIFT;
-						const z = cellZ << ScanResult.CELL_SHIFT;
+						const x = cellX << this.cellShift;
+						const z = cellZ << this.cellShift;
 						const pos = { x, y, z };
 
 						if (filter && !filter(pos)) continue;
@@ -301,35 +298,30 @@ export class ScanResult {
 }
 
 /**
- * A highly optimized BFS Scanner using the Singleton pattern.
+ * A highly optimized BFS Scanner.
  */
 export class BFSScanner {
-	private static instance: BFSScanner;
+	private readonly cellSize: number;
+	private readonly cellShift: number;
 
 	// Reusable vector to avoid allocation during getBlock
 	private tempPos: Vector3 = { x: 0, y: 0, z: 0 };
 
-	// Directions: North, South, East, West (Scaled by CELL_SIZE)
-	private readonly directions = [
-		{ x: ScanResult.CELL_SIZE, y: 0, z: 0 },
-		{ x: -ScanResult.CELL_SIZE, y: 0, z: 0 },
-		{ x: 0, y: 0, z: ScanResult.CELL_SIZE },
-		{ x: 0, y: 0, z: -ScanResult.CELL_SIZE },
-	];
+	// Directions: North, South, East, West (Scaled by cellSize)
+	private readonly directions: Vector3[];
 
 	// Global storage for scan results per dimension
 	private globalScanResults: Map<string, ScanResult> = new Map();
 
-	private constructor() {}
-
-	/**
-	 * Gets the singleton instance of the BFSScanner.
-	 */
-	public static getInstance(): BFSScanner {
-		if (!BFSScanner.instance) {
-			BFSScanner.instance = new BFSScanner();
-		}
-		return BFSScanner.instance;
+	constructor(cellSize: number = 8) {
+		this.cellSize = cellSize;
+		this.cellShift = Math.log2(cellSize);
+		this.directions = [
+			{ x: cellSize, y: 0, z: 0 },
+			{ x: -cellSize, y: 0, z: 0 },
+			{ x: 0, y: 0, z: cellSize },
+			{ x: 0, y: 0, z: -cellSize },
+		];
 	}
 
 	/**
@@ -338,7 +330,7 @@ export class BFSScanner {
 	 */
 	public getScanResult(dimensionId: string): ScanResult {
 		if (!this.globalScanResults.has(dimensionId)) {
-			this.globalScanResults.set(dimensionId, new ScanResult());
+			this.globalScanResults.set(dimensionId, new ScanResult(this.cellSize));
 		}
 		return this.globalScanResults.get(dimensionId)!;
 	}
@@ -364,7 +356,7 @@ export class BFSScanner {
 			forceRescan = false,
 			yieldInterval = 100,
 		} = config;
-		const result = existingResult || new ScanResult();
+		const result = existingResult || new ScanResult(this.cellSize);
 
 		// Optimization: Use Int32Array for queue to save memory compared to standard Array
 		// Initial size 1000 * 3 coordinates. Will grow if needed.
@@ -389,10 +381,10 @@ export class BFSScanner {
 
 		// Start at center, aligned to cell grid
 		const startX =
-			Math.floor(center.x / ScanResult.CELL_SIZE) * ScanResult.CELL_SIZE;
+			Math.floor(center.x / this.cellSize) * this.cellSize;
 		const startY = Math.floor(center.y);
 		const startZ =
-			Math.floor(center.z / ScanResult.CELL_SIZE) * ScanResult.CELL_SIZE;
+			Math.floor(center.z / this.cellSize) * this.cellSize;
 
 		pushToQueue(startX, startY, startZ);
 
@@ -400,13 +392,13 @@ export class BFSScanner {
 		// hash collisions when the scan center is far from world origin.
 		// Key: (relCellX & 0xfffff) | ((relCellZ & 0xfffff) * 0x100000)
 		// Supports relative ranges of ±524287 cells (±4M blocks), safe for any Minecraft world.
-		const startCellX = startX >> 3;
-		const startCellZ = startZ >> 3;
+		const startCellX = startX >> this.cellShift;
+		const startCellZ = startZ >> this.cellShift;
 		const visitedXZ = new Map<number, Set<number>>();
 
 		const markVisited = (x: number, y: number, z: number) => {
-			const relX = (x >> 3) - startCellX;
-			const relZ = (z >> 3) - startCellZ;
+			const relX = (x >> this.cellShift) - startCellX;
+			const relZ = (z >> this.cellShift) - startCellZ;
 			const key = (relX & 0xfffff) | ((relZ & 0xfffff) * 0x100000);
 			let ySet = visitedXZ.get(key);
 			if (!ySet) {
@@ -417,8 +409,8 @@ export class BFSScanner {
 		};
 
 		const isVisited = (x: number, y: number, z: number): boolean => {
-			const relX = (x >> 3) - startCellX;
-			const relZ = (z >> 3) - startCellZ;
+			const relX = (x >> this.cellShift) - startCellX;
+			const relZ = (z >> this.cellShift) - startCellZ;
 			const key = (relX & 0xfffff) | ((relZ & 0xfffff) * 0x100000);
 			const ySet = visitedXZ.get(key);
 			return ySet ? ySet.has(y) : false;
@@ -477,10 +469,10 @@ export class BFSScanner {
 				}
 
 				let isValid = true;
-				// Check 8x8 volume
+				// Check cell volume
 				try {
-					for (let dx = 0; dx < ScanResult.CELL_SIZE; dx++) {
-						for (let dz = 0; dz < ScanResult.CELL_SIZE; dz++) {
+					for (let dx = 0; dx < this.cellSize; dx++) {
+						for (let dz = 0; dz < this.cellSize; dz++) {
 							this.tempPos.x = cx + dx;
 							this.tempPos.z = cz + dz;
 							const block = dimension.getBlock(this.tempPos);
@@ -561,9 +553,9 @@ export class BFSScanner {
 		avoidBorderCells: boolean = false,
 		simplify: boolean = true,
 	): Vector3[] | undefined {
-		const cs = ScanResult.CELL_SIZE;
+		const cs = this.cellSize;
 
-		// Align both positions to the 8-block cell grid.
+		// Align both positions to the cell grid.
 		const startX = Math.floor(start.x / cs) * cs;
 		const startZ = Math.floor(start.z / cs) * cs;
 		const goalX = Math.floor(goal.x / cs) * cs;
@@ -663,7 +655,7 @@ export class BFSScanner {
 				return simplified;
 			}
 
-			// Expand 4-directional neighbours at CELL_SIZE (8-block) intervals.
+			// Expand 4-directional neighbours at local cellSize intervals.
 			for (const dir of this.directions) {
 				const nx = current.x + dir.x;
 				const nz = current.z + dir.z;
@@ -672,7 +664,7 @@ export class BFSScanner {
 				if (closed.has(nk)) continue;
 
 				// Neighbour must be a confirmed water cell.
-				// (The start node is exempt — the ship is physically there even if the
+				// (The start node is exempt — the object is physically there even if the
 				//  BFS did not capture that exact cell.)
 				if (!result.hasHeight(nx, nz)) continue;
 
