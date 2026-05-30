@@ -52,7 +52,12 @@ class PlayerManager {
 	 * Debug function to display the players' state in the action bar.
 	 */
 	public debugPlayers() {
-		let data: { playerName: string; branch: string; level: string; state: string }[] = [];
+		let data: {
+			playerName: string;
+			branch: string;
+			level: string;
+			state: string;
+		}[] = [];
 
 		let longestPlayerName = 0;
 		let longestBranchName = 0;
@@ -69,12 +74,15 @@ class PlayerManager {
 			});
 			longestPlayerName = Math.max(longestPlayerName, player.nameTag.length);
 			longestBranchName = Math.max(longestBranchName, playerObject.branch.length);
-			longestLevelName = Math.max(longestLevelName, playerObject.playerLevel.length);
+			longestLevelName = Math.max(
+				longestLevelName,
+				playerObject.playerLevel.length,
+			);
 		}
 
 		let formattedData = data.map((player) => {
 			return `${player.playerName.padEnd(longestPlayerName)} | §a${player.branch.padEnd(longestBranchName)}§r | §6${player.level.padEnd(
-				longestLevelName
+				longestLevelName,
 			)}§r | §3${player.state}§r`;
 		});
 
@@ -92,15 +100,25 @@ class PlayerManager {
 		}
 	}
 
-	private updatePlayerState(currentLevel: Level, player: mc.Player, playerObject: PlayerObject, branch: Branch) {
-		if (playerObject.playerLevel === currentLevel.identifier && playerObject.playerState === playerState.SETUP_PLAYER) {
+	private updatePlayerState(
+		currentLevel: Level,
+		player: mc.Player,
+		playerObject: PlayerObject,
+		branch: Branch,
+	) {
+		if (
+			playerObject.playerLevel === currentLevel.identifier &&
+			playerObject.playerState === playerState.SETUP_PLAYER
+		) {
 			currentLevel.eventTrigger.triggerPlayerJoinLevel(player);
 			playerObject.playerState = playerState.EXIT_PLAYER;
 		} else if (playerObject.playerLevel !== currentLevel.identifier) {
 			const levels = Array.from(branch.getLevels());
 
 			const currentIndex = currentLevel.levelIndex;
-			const playerIndex = levels.findIndex((level) => level[0] === playerObject.playerLevel);
+			const playerIndex = levels.findIndex(
+				(level) => level[0] === playerObject.playerLevel,
+			);
 
 			if (currentIndex > playerIndex) {
 				for (let i = playerIndex; i < currentIndex; i++) {
@@ -143,7 +161,10 @@ class PlayerManager {
 	 * If a player does not exist on the database, it will be added to the main branch.
 	 * @param player The player that joined the server.
 	 */
-	public onPlayerJoinServer(player: mc.Player, branches: { branches: Map<string, Branch>; activeBranches: Set<Branch> }) {
+	public onPlayerJoinServer(
+		player: mc.Player,
+		branches: { branches: Map<string, Branch>; activeBranches: Set<Branch> },
+	) {
 		this.registerNewPlayer(player);
 
 		this.players.set(player.id, player);
@@ -168,7 +189,10 @@ class PlayerManager {
 	 * Called when a player respawns.
 	 * @param player The player that respawned.
 	 */
-	public onPlayerRespawn(player: mc.Player, branches: { branches: Map<string, Branch>; activeBranches: Set<Branch> }) {
+	public onPlayerRespawn(
+		player: mc.Player,
+		branches: { branches: Map<string, Branch>; activeBranches: Set<Branch> },
+	) {
 		const playerObject = this.playerDatabase.getObject(player.id)!;
 		const branch = branches.branches.get(playerObject.branch)!;
 		const level = branch.getActiveLevel();
@@ -182,7 +206,10 @@ class PlayerManager {
 	 * Called when a player leaves the server.
 	 * @param player The player that left the server.
 	 */
-	public onPlayerLeaveServer(player: mc.Player, branches: { branches: Map<string, Branch>; activeBranches: Set<Branch> }) {
+	public onPlayerLeaveServer(
+		player: mc.Player,
+		branches: { branches: Map<string, Branch>; activeBranches: Set<Branch> },
+	) {
 		this.players.delete(player.id);
 
 		const playerObject = this.playerDatabase.getObject(player.id)!;
@@ -198,7 +225,10 @@ class PlayerManager {
 	 * Called when a player dies.
 	 * @param player The player that died.
 	 */
-	public onPlayerDeath(player: mc.Player, branches: { branches: Map<string, Branch>; activeBranches: Set<Branch> }) {
+	public onPlayerDeath(
+		player: mc.Player,
+		branches: { branches: Map<string, Branch>; activeBranches: Set<Branch> },
+	) {
 		const playerObject = this.playerDatabase.getObject(player.id)!;
 		const branch = branches.branches.get(playerObject.branch)!;
 		const level = branch.getActiveLevel();
@@ -216,7 +246,12 @@ class PlayerManager {
 				.forEach((player) => {
 					const p = this.players.get(player.id);
 					if (p) {
-						this.updatePlayerState(branch.getActiveLevel()!, p, player, branch);
+						this.updatePlayerState(
+							branch.getActiveLevel()!,
+							p,
+							player,
+							branch,
+						);
 					}
 				});
 		});
@@ -227,7 +262,9 @@ class StateMachine {
 	private static instance: StateMachine;
 
 	private eventTrigger: StateMachineEvents = new StateMachineEvents();
-	public events: StateMachineEventRegister = new StateMachineEventRegister(this.eventTrigger);
+	public events: StateMachineEventRegister = new StateMachineEventRegister(
+		this.eventTrigger,
+	);
 
 	private playersManager: PlayerManager = new PlayerManager();
 
@@ -239,7 +276,12 @@ class StateMachine {
 	 * Debug function to display the branches' state in the action bar.
 	 */
 	private debugBranches() {
-		let data: { branch: string; level: string; state: string; isActive: boolean }[] = [];
+		let data: {
+			branch: string;
+			level: string;
+			state: string;
+			isActive: boolean;
+		}[] = [];
 
 		let longestBranchName = 0;
 		let longestLevelName = 0;
@@ -253,7 +295,10 @@ class StateMachine {
 				isActive: this.activeBranches.has(branch),
 			});
 			longestBranchName = Math.max(longestBranchName, branch.identifier.length);
-			longestLevelName = Math.max(longestLevelName, level?.identifier.length ?? 0);
+			longestLevelName = Math.max(
+				longestLevelName,
+				level?.identifier.length ?? 0,
+			);
 		});
 
 		let formattedData = data.map((branch) => {
@@ -274,7 +319,9 @@ class StateMachine {
 	public createBranch(name: string, activate: boolean = false): Branch {
 		const branchIdentifier = `${getNamespace()}:${name}`;
 		if (this.branches.has(branchIdentifier)) {
-			throw new Error(`Branch with name ${branchIdentifier} already exists. Error at StateMachine.createBranch`);
+			throw new Error(
+				`Branch with name ${branchIdentifier} already exists. Error at StateMachine.createBranch`,
+			);
 		}
 		const branch = new Branch(name);
 		this.branches.set(branchIdentifier, branch);
@@ -322,23 +369,34 @@ class StateMachine {
 	private constructor() {
 		mc.world.afterEvents.playerSpawn.subscribe((event) => {
 			if (event.initialSpawn) {
-				this.playersManager.onPlayerJoinServer(event.player, { branches: this.branches, activeBranches: this.activeBranches });
+				this.playersManager.onPlayerJoinServer(event.player, {
+					branches: this.branches,
+					activeBranches: this.activeBranches,
+				});
 			} else {
-				this.playersManager.onPlayerRespawn(event.player, { branches: this.branches, activeBranches: this.activeBranches });
+				this.playersManager.onPlayerRespawn(event.player, {
+					branches: this.branches,
+					activeBranches: this.activeBranches,
+				});
 			}
 		});
 
 		mc.world.beforeEvents.playerLeave.subscribe((event) => {
-			this.playersManager.onPlayerLeaveServer(event.player, { branches: this.branches, activeBranches: this.activeBranches });
+			this.playersManager.onPlayerLeaveServer(event.player, {
+				branches: this.branches,
+				activeBranches: this.activeBranches,
+			});
 		});
 
 		mc.world.afterEvents.entityDie.subscribe(
 			(event) => {
-				this.playersManager.onPlayerDeath(event.deadEntity as mc.Player, { branches: this.branches, activeBranches: this.activeBranches });
+				this.playersManager.onPlayerDeath(event.deadEntity as mc.Player, {
+					branches: this.branches,
+					activeBranches: this.activeBranches,
+				});
 			},
-			{ entityTypes: ["minecraft:player"] }
+			{ entityTypes: ["minecraft:player"] },
 		);
-
 
 		mc.system.runInterval(() => this.eventTrigger.triggerTick());
 
@@ -375,7 +433,7 @@ class StateMachine {
  * Registers custom commands for the state machine.
  * Call this from your startup handler: `system.beforeEvents.startup.subscribe((startup) => registerStateMachineCommands(startup));`
  */
-export function registerStateMachineCommands(startup?: mc.StartupEvent) {
+function registerStateMachineCommands(startup?: mc.StartupEvent) {
 	if (!startup) return;
 
 	const CMD = `${getNamespace()}:gamestate`;
@@ -386,10 +444,13 @@ export function registerStateMachineCommands(startup?: mc.StartupEvent) {
 
 	const cmd: mc.CustomCommand = {
 		name: CMD,
-		description: "Control the state machine: actions are 'reset' or 'jump_level <level>'",
+		description:
+			"Control the state machine: actions are 'reset' or 'jump_level <level>'",
 		permissionLevel: mc.CommandPermissionLevel.Any,
 		cheatsRequired: true,
-		mandatoryParameters: [{ name: ACTION_ENUM, type: mc.CustomCommandParamType.Enum }],
+		mandatoryParameters: [
+			{ name: ACTION_ENUM, type: mc.CustomCommandParamType.Enum },
+		],
 	};
 
 	startup.customCommandRegistry.registerCommand(
@@ -397,20 +458,36 @@ export function registerStateMachineCommands(startup?: mc.StartupEvent) {
 		(origin: mc.CustomCommandOrigin, action: string, level?: string) => {
 			if (action === "reset") {
 				StateMachine.getInstance().triggerReset();
-				return { status: mc.CustomCommandStatus.Success, message: "State machine reset." } as mc.CustomCommandResult;
+				return {
+					status: mc.CustomCommandStatus.Success,
+					message: "State machine reset.",
+				} as mc.CustomCommandResult;
 			}
 			if (action === "jump_level") {
 				if (!level) {
-					return { status: mc.CustomCommandStatus.Failure, message: "Missing level identifier for jump_level." } as mc.CustomCommandResult;
+					return {
+						status: mc.CustomCommandStatus.Failure,
+						message: "Missing level identifier for jump_level.",
+					} as mc.CustomCommandResult;
 				}
 				StateMachine.getInstance().jumpToLevel(level);
-				return { status: mc.CustomCommandStatus.Success, message: `Jumped to level ${level}.` } as mc.CustomCommandResult;
+				return {
+					status: mc.CustomCommandStatus.Success,
+					message: `Jumped to level ${level}.`,
+				} as mc.CustomCommandResult;
 			}
 
-			return { status: mc.CustomCommandStatus.Failure, message: `Unknown action: ${action}` } as mc.CustomCommandResult;
+			return {
+				status: mc.CustomCommandStatus.Failure,
+				message: `Unknown action: ${action}`,
+			} as mc.CustomCommandResult;
 		},
 	);
 }
+
+mc.system.beforeEvents.startup.subscribe((startup) =>
+	registerStateMachineCommands(startup),
+);
 
 mc.world.afterEvents.worldLoad.subscribe((eventData) => {
 	stateMachine = StateMachine.getInstance();
