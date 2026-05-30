@@ -457,7 +457,9 @@ function registerStateMachineCommands(startup?: mc.StartupEvent) {
 		cmd,
 		(origin: mc.CustomCommandOrigin, action: string, level?: string) => {
 			if (action === "reset") {
-				StateMachine.getInstance().triggerReset();
+				mc.system.run(() => {
+					StateMachine.getInstance().triggerReset();
+				});
 				return {
 					status: mc.CustomCommandStatus.Success,
 					message: "State machine reset.",
