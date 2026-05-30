@@ -302,6 +302,16 @@ class StateMachine {
 		this.activeBranches.delete(branch);
 	}
 
+	public triggerReset() {
+		this.eventTrigger.triggerReset();
+	}
+
+	public jumpToLevel(levelId: string) {
+		this.activeBranches.forEach((branch) => {
+			branch.jumpToLevel(levelId);
+		});
+	}
+
 	public static getInstance(): StateMachine {
 		if (!StateMachine.instance) {
 			StateMachine.instance = new StateMachine();
@@ -329,17 +339,6 @@ class StateMachine {
 			{ entityTypes: ["minecraft:player"] }
 		);
 
-		mc.system.afterEvents.scriptEventReceive.subscribe((event) => {
-			const RESET_EVENT = `${getNamespace()}:reset`;
-			const JUMP_EVENT = `${getNamespace()}:jump`;
-			if (event.id === RESET_EVENT) {
-				this.eventTrigger.triggerReset();
-			} else if (event.id === JUMP_EVENT) {
-				this.activeBranches.forEach((branch) => {
-					branch.jumpToLevel(event.message);
-				});
-			}
-		});
 
 		mc.system.runInterval(() => this.eventTrigger.triggerTick());
 
@@ -370,6 +369,47 @@ class StateMachine {
 			//mc.world.getDimension(mc.MinecraftDimensionTypes.overworld).runCommand(`title @a actionbar ${combinedData.join("\n")}`);
 		});
 	}
+}
+
+/**
+ * Registers custom commands for the state machine.
+ * Call this from your startup handler: `system.beforeEvents.startup.subscribe((startup) => registerStateMachineCommands(startup));`
+ */
+export function registerStateMachineCommands(startup?: mc.StartupEvent) {
+	if (!startup) return;
+
+	const CMD = `${getNamespace()}:gamestate`;
+	const ACTION_ENUM = `${getNamespace()}:gamestate_action`;
+
+	// register enum values: 'reset' or 'jump_level'
+	startup.customCommandRegistry.registerEnum(ACTION_ENUM, ["reset", "jump_level"]);
+
+	const cmd: mc.CustomCommand = {
+		name: CMD,
+		description: "Control the state machine: actions are 'reset' or 'jump_level <level>'",
+		permissionLevel: mc.CommandPermissionLevel.Any,
+		cheatsRequired: true,
+		mandatoryParameters: [{ name: ACTION_ENUM, type: mc.CustomCommandParamType.Enum }],
+	};
+
+	startup.customCommandRegistry.registerCommand(
+		cmd,
+		(origin: mc.CustomCommandOrigin, action: string, level?: string) => {
+			if (action === "reset") {
+				StateMachine.getInstance().triggerReset();
+				return { status: mc.CustomCommandStatus.Success, message: "State machine reset." } as mc.CustomCommandResult;
+			}
+			if (action === "jump_level") {
+				if (!level) {
+					return { status: mc.CustomCommandStatus.Failure, message: "Missing level identifier for jump_level." } as mc.CustomCommandResult;
+				}
+				StateMachine.getInstance().jumpToLevel(level);
+				return { status: mc.CustomCommandStatus.Success, message: `Jumped to level ${level}.` } as mc.CustomCommandResult;
+			}
+
+			return { status: mc.CustomCommandStatus.Failure, message: `Unknown action: ${action}` } as mc.CustomCommandResult;
+		},
+	);
 }
 
 mc.world.afterEvents.worldLoad.subscribe((eventData) => {

@@ -75,11 +75,15 @@ class CustomPlayer {
 	}
 
 	get equippableComponent() {
-		return this.player.getComponent(EntityEquippableComponent.componentId) as EntityEquippableComponent;
+		return this.player.getComponent(
+			EntityEquippableComponent.componentId,
+		) as EntityEquippableComponent;
 	}
 
 	get inventoryComponent() {
-		return this.player.getComponent(EntityInventoryComponent.componentId) as EntityInventoryComponent;
+		return this.player.getComponent(
+			EntityInventoryComponent.componentId,
+		) as EntityInventoryComponent;
 	}
 
 	getEquippedItem(): ItemStack | undefined {
@@ -95,7 +99,10 @@ class CustomPlayer {
 	tick() {
 		this.stateTick++;
 
-		if (this.player.inputInfo.getButtonState(InputButton.Jump) === ButtonState.Pressed) {
+		if (
+			this.player.inputInfo.getButtonState(InputButton.Jump) ===
+			ButtonState.Pressed
+		) {
 			this.JumpTick++;
 		} else if (this.JumpTick > 0) {
 			this.JumpTick = -1;
@@ -103,7 +110,10 @@ class CustomPlayer {
 			this.JumpTick = 0;
 		}
 
-		if (this.player.inputInfo.getButtonState(InputButton.Sneak) === ButtonState.Pressed) {
+		if (
+			this.player.inputInfo.getButtonState(InputButton.Sneak) ===
+			ButtonState.Pressed
+		) {
 			this.SneakTick++;
 		} else if (this.SneakTick > 0) {
 			this.SneakTick = -1;

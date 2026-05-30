@@ -380,11 +380,9 @@ export class BFSScanner {
 		};
 
 		// Start at center, aligned to cell grid
-		const startX =
-			Math.floor(center.x / this.cellSize) * this.cellSize;
+		const startX = Math.floor(center.x / this.cellSize) * this.cellSize;
 		const startY = Math.floor(center.y);
-		const startZ =
-			Math.floor(center.z / this.cellSize) * this.cellSize;
+		const startZ = Math.floor(center.z / this.cellSize) * this.cellSize;
 
 		pushToQueue(startX, startY, startZ);
 
