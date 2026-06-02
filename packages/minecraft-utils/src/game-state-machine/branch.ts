@@ -46,7 +46,6 @@ class BranchManager {
 		this.levelState = branchState.levelState;
 		this.levelTick = branchState.levelTick;
 		this.stateTick = branchState.stateTick;
-		this.updateBranchState();
 	}
 
 	constructor(name: string) {
@@ -147,6 +146,5 @@ export class Branch extends BranchManager {
 			}
 			this.updateBranchState();
 		}
-		this.getBranchState();
 	}
 }

@@ -260,10 +260,12 @@ class SimpleDatabase<T extends SimpleObject> {
 	 * @param object The object to be updated.
 	 */
 	updateObject(object: T): void {
-		if (this.hasObject(object.id)) {
-			this.removeObject(object.id);
-		}
-		this.addObject(object);
+		// Directly manipulate localDB to avoid routing through overridable addObject/removeObject,
+		// which would cause subclasses (e.g. ForceSaveDatabase) to emit multiple saves including
+		// one intermediate save where the object is removed but not yet re-added.
+		this.localDB = this.localDB.filter((o) => o.id !== object.id);
+		this.localDB.push(object);
+		this.pendingChanges++;
 	}
 
 	/**
