@@ -179,6 +179,8 @@ class PlayerManager {
 			playerObject.playerState = playerState.SETUP_PLAYER;
 			mainLevel0.eventTrigger.triggerPlayerJoinServer(player);
 		} else {
+			playerObject.playerLevel = currentLevel.identifier;
+			playerObject.playerState = playerState.SETUP_PLAYER;
 			currentLevel.eventTrigger.triggerPlayerJoinServer(player);
 			this.updatePlayerState(currentLevel, player, playerObject, branch);
 		}
