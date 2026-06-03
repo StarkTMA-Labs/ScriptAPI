@@ -90,7 +90,6 @@ class PlayerManager {
 	}
 
 	private registerNewPlayer(player: mc.Player) {
-		// BUG-11: mainBranch/mainLevel0 are assigned in worldLoad; guard against pre-init calls
 		if (!mainBranch || !mainLevel0) return;
 		if (!this.playerDatabase.hasObject(player.id)) {
 			this.playerDatabase.addObject({
@@ -122,7 +121,6 @@ class PlayerManager {
 				(level) => level[0] === playerObject.playerLevel,
 			);
 
-			// BUG-1: playerLevel may not exist in this branch (stale data / branch switch)
 			if (playerIndex === -1) {
 				playerObject.playerState = playerState.SETUP_PLAYER;
 				playerObject.playerLevel = currentLevel.identifier;
@@ -179,11 +177,9 @@ class PlayerManager {
 
 		this.players.set(player.id, player);
 
-		// BUG-3: player may not be in DB if registerNewPlayer returned early (pre-init)
 		const playerObject = this.playerDatabase.getObject(player.id);
 		if (!playerObject) return;
 
-		// BUG-4: stored branch ID may not exist (namespace change / data corruption)
 		let branch = branches.branches.get(playerObject.branch);
 		if (!branch) {
 			if (!mainBranch || !mainLevel0) return;
@@ -220,7 +216,6 @@ class PlayerManager {
 		player: mc.Player,
 		branches: { branches: Map<string, Branch>; activeBranches: Set<Branch> },
 	) {
-		// BUG-3/4: null-guard player and branch lookups
 		const playerObject = this.playerDatabase.getObject(player.id);
 		if (!playerObject) return;
 		const branch = branches.branches.get(playerObject.branch);
@@ -240,10 +235,8 @@ class PlayerManager {
 		player: mc.Player,
 		branches: { branches: Map<string, Branch>; activeBranches: Set<Branch> },
 	) {
-		// players.delete is safe in beforeEvents; keep it immediate
 		this.players.delete(player.id);
 
-		// BUG-3/4: null-guard player and branch lookups
 		const playerObject = this.playerDatabase.getObject(player.id);
 		if (!playerObject) return;
 		const branch = branches.branches.get(playerObject.branch);
@@ -251,8 +244,6 @@ class PlayerManager {
 		const level = branch.getActiveLevel();
 
 		if (level) {
-			// BUG-10: defer callback dispatch out of beforeEvents restricted context
-			// so user-registered onPlayerLeaveServer handlers can safely mutate world state
 			const trigger = level.eventTrigger;
 			mc.system.run(() => trigger.triggerPlayerLeaveServer(player));
 		}
@@ -266,7 +257,6 @@ class PlayerManager {
 		player: mc.Player,
 		branches: { branches: Map<string, Branch>; activeBranches: Set<Branch> },
 	) {
-		// BUG-3/4: null-guard player and branch lookups
 		const playerObject = this.playerDatabase.getObject(player.id);
 		if (!playerObject) return;
 		const branch = branches.branches.get(playerObject.branch);
@@ -280,8 +270,6 @@ class PlayerManager {
 
 	public tick(activeBranches: Set<Branch>) {
 		activeBranches.forEach((branch) => {
-			// BUG-2: branch.tick() may complete the branch (sets activeLevel = undefined)
-			// before this runs; resolve once and skip if already gone
 			const activeLevel = branch.getActiveLevel();
 			if (!activeLevel) return;
 			this.playerDatabase
@@ -490,10 +478,7 @@ function registerStateMachineCommands(startup?: mc.StartupEvent) {
 		mandatoryParameters: [
 			{ name: ACTION_ENUM, type: mc.CustomCommandParamType.Enum },
 		],
-		// BUG-6: register the optional level string so the handler actually receives it
-		optionalParameters: [
-			{ name: "level", type: mc.CustomCommandParamType.String },
-		],
+		optionalParameters: [{ name: "level", type: mc.CustomCommandParamType.String }],
 	};
 
 	startup.customCommandRegistry.registerCommand(
@@ -515,7 +500,6 @@ function registerStateMachineCommands(startup?: mc.StartupEvent) {
 						message: "Missing level identifier for jump_level.",
 					} as mc.CustomCommandResult;
 				}
-				// BUG-5: wrap in system.run() — command handler context restricts world mutations
 				mc.system.run(() => {
 					StateMachine.getInstance().jumpToLevel(level!);
 				});
