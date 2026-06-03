@@ -1,18 +1,253 @@
 import { Dimension, Vector3 } from "@minecraft/server";
 
+export class VolumeScanResult {
+	private static readonly CHUNK_SIZE = 16;
+	private static readonly CHUNK_MASK = 0xf;
+	private static readonly CHUNK_SHIFT = 4;
+	private static readonly CHUNK_VOLUME = 4096;
+
+	private readonly chunks = new Map<string, Float64Array>();
+
+	public set(x: number, y: number, z: number, metadata: number = 1): void {
+		const cx = Math.floor(x);
+		const cy = Math.floor(y);
+		const cz = Math.floor(z);
+
+		const chunkX = cx >> VolumeScanResult.CHUNK_SHIFT;
+		const chunkY = cy >> VolumeScanResult.CHUNK_SHIFT;
+		const chunkZ = cz >> VolumeScanResult.CHUNK_SHIFT;
+		const key = `${chunkX},${chunkY},${chunkZ}`;
+
+		let chunk = this.chunks.get(key);
+		if (!chunk) {
+			chunk = new Float64Array(VolumeScanResult.CHUNK_VOLUME).fill(NaN);
+			this.chunks.set(key, chunk);
+		}
+
+		const localX = cx & VolumeScanResult.CHUNK_MASK;
+		const localY = cy & VolumeScanResult.CHUNK_MASK;
+		const localZ = cz & VolumeScanResult.CHUNK_MASK;
+		const index =
+			(localZ << (VolumeScanResult.CHUNK_SHIFT * 2)) |
+			(localY << VolumeScanResult.CHUNK_SHIFT) |
+			localX;
+
+		chunk[index] = metadata;
+	}
+
+	public get(x: number, y: number, z: number): number | undefined {
+		const cx = Math.floor(x);
+		const cy = Math.floor(y);
+		const cz = Math.floor(z);
+
+		const chunkX = cx >> VolumeScanResult.CHUNK_SHIFT;
+		const chunkY = cy >> VolumeScanResult.CHUNK_SHIFT;
+		const chunkZ = cz >> VolumeScanResult.CHUNK_SHIFT;
+		const key = `${chunkX},${chunkY},${chunkZ}`;
+
+		const chunk = this.chunks.get(key);
+		if (!chunk) return undefined;
+
+		const localX = cx & VolumeScanResult.CHUNK_MASK;
+		const localY = cy & VolumeScanResult.CHUNK_MASK;
+		const localZ = cz & VolumeScanResult.CHUNK_MASK;
+		const index =
+			(localZ << (VolumeScanResult.CHUNK_SHIFT * 2)) |
+			(localY << VolumeScanResult.CHUNK_SHIFT) |
+			localX;
+
+		const val = chunk[index];
+		return Number.isNaN(val) ? undefined : val;
+	}
+
+	public has(x: number, y: number, z: number): boolean {
+		return this.get(x, y, z) !== undefined;
+	}
+
+	public clear(): void {
+		this.chunks.clear();
+	}
+
+	public getRandomPosition(
+		center?: Vector3,
+		minRadius?: number,
+		maxRadius?: number,
+		filter?: (pos: Vector3, meta: number) => boolean,
+	): Vector3 | undefined {
+		if (this.chunks.size === 0) return undefined;
+
+		const keys = Array.from(this.chunks.keys());
+		const rSqMax = maxRadius ? maxRadius * maxRadius : Infinity;
+		const rSqMin = minRadius ? minRadius * minRadius : 0;
+
+		for (let attempt = 0; attempt < 50; attempt++) {
+			const randomKey = keys[Math.floor(Math.random() * keys.length)];
+			const chunk = this.chunks.get(randomKey)!;
+			const [cxStr, cyStr, czStr] = randomKey.split(",");
+			const chunkX = parseInt(cxStr);
+			const chunkY = parseInt(cyStr);
+			const chunkZ = parseInt(czStr);
+
+			for (let i = 0; i < 10; i++) {
+				const localX = Math.floor(Math.random() * VolumeScanResult.CHUNK_SIZE);
+				const localY = Math.floor(Math.random() * VolumeScanResult.CHUNK_SIZE);
+				const localZ = Math.floor(Math.random() * VolumeScanResult.CHUNK_SIZE);
+
+				const index =
+					(localZ << (VolumeScanResult.CHUNK_SHIFT * 2)) |
+					(localY << VolumeScanResult.CHUNK_SHIFT) |
+					localX;
+				const meta = chunk[index];
+
+				if (!Number.isNaN(meta)) {
+					const x = (chunkX << VolumeScanResult.CHUNK_SHIFT) + localX;
+					const y = (chunkY << VolumeScanResult.CHUNK_SHIFT) + localY;
+					const z = (chunkZ << VolumeScanResult.CHUNK_SHIFT) + localZ;
+					const pos = { x, y, z };
+
+					if (center) {
+						const dx = x - center.x;
+						const dy = y - center.y;
+						const dz = z - center.z;
+						const distSq = dx * dx + dy * dy + dz * dz;
+						if (distSq > rSqMax || distSq < rSqMin) continue;
+					}
+
+					if (filter && !filter(pos, meta)) continue;
+
+					return pos;
+				}
+			}
+		}
+		return undefined;
+	}
+
+	public findPath(
+		start: Vector3,
+		goal: Vector3,
+		maxNodes: number = 1500,
+		simplify: boolean = true,
+	): Vector3[] | undefined {
+		const startX = Math.floor(start.x);
+		const startY = Math.floor(start.y);
+		const startZ = Math.floor(start.z);
+		const goalX = Math.floor(goal.x);
+		const goalY = Math.floor(goal.y);
+		const goalZ = Math.floor(goal.z);
+
+		if (!this.has(goalX, goalY, goalZ)) return undefined;
+
+		if (startX === goalX && startY === goalY && startZ === goalZ) {
+			return [{ x: goalX, y: goalY, z: goalZ }];
+		}
+
+		const toKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
+		const startKey = toKey(startX, startY, startZ);
+		const goalKey = toKey(goalX, goalY, goalZ);
+
+		const heuristic = (x: number, y: number, z: number) =>
+			Math.abs(x - goalX) + Math.abs(y - goalY) + Math.abs(z - goalZ);
+
+		type AStarNode = { x: number; y: number; z: number; f: number; g: number };
+		const openSet: AStarNode[] = [];
+		const gScore = new Map<string, number>();
+		const cameFrom = new Map<string, string>();
+		const closed = new Set<string>();
+
+		gScore.set(startKey, 0);
+		openSet.push({
+			x: startX,
+			y: startY,
+			z: startZ,
+			g: 0,
+			f: heuristic(startX, startY, startZ),
+		});
+
+		const directions = [
+			{ x: 1, y: 0, z: 0 },
+			{ x: -1, y: 0, z: 0 },
+			{ x: 0, y: 1, z: 0 },
+			{ x: 0, y: -1, z: 0 },
+			{ x: 0, y: 0, z: 1 },
+			{ x: 0, y: 0, z: -1 },
+		];
+
+		let nodesExpanded = 0;
+
+		while (openSet.length > 0) {
+			if (nodesExpanded++ > maxNodes) return undefined;
+
+			let bestIdx = 0;
+			for (let i = 1; i < openSet.length; i++) {
+				if (openSet[i].f < openSet[bestIdx].f) bestIdx = i;
+			}
+			const current = openSet.splice(bestIdx, 1)[0];
+
+			const ck = toKey(current.x, current.y, current.z);
+			if (closed.has(ck)) continue;
+			closed.add(ck);
+
+			if (ck === goalKey) {
+				const path: Vector3[] = [];
+				let node = goalKey;
+				while (cameFrom.has(node)) {
+					const [px, py, pz] = node.split(",").map(Number);
+					path.push({ x: px, y: py, z: pz });
+					node = cameFrom.get(node)!;
+				}
+				path.reverse();
+
+				if (path.length <= 2 || !simplify) return path;
+
+				const simplified: Vector3[] = [path[0]];
+				for (let i = 1; i < path.length - 1; i++) {
+					const prev = simplified[simplified.length - 1];
+					const curr = path[i];
+					const next = path[i + 1];
+					if (
+						Math.sign(curr.x - prev.x) !== Math.sign(next.x - curr.x) ||
+						Math.sign(curr.y - prev.y) !== Math.sign(next.y - curr.y) ||
+						Math.sign(curr.z - prev.z) !== Math.sign(next.z - curr.z)
+					) {
+						simplified.push(curr);
+					}
+				}
+				simplified.push(path[path.length - 1]);
+				return simplified;
+			}
+
+			for (const dir of directions) {
+				const nx = current.x + dir.x;
+				const ny = current.y + dir.y;
+				const nz = current.z + dir.z;
+				const nk = toKey(nx, ny, nz);
+
+				if (closed.has(nk)) continue;
+				if (!this.has(nx, ny, nz)) continue;
+
+				const ng = current.g + 1;
+				const existing = gScore.get(nk);
+				if (existing !== undefined && existing <= ng) continue;
+
+				gScore.set(nk, ng);
+				cameFrom.set(nk, ck);
+				openSet.push({
+					x: nx,
+					y: ny,
+					z: nz,
+					g: ng,
+					f: ng + heuristic(nx, ny, nz),
+				});
+			}
+		}
+
+		return undefined;
+	}
+}
+
 export interface BFSScanOptions {
-	/**
-	 * Starting point of the search
-	 */
 	origin: Vector3;
-	/**
-	 * Dimension to search in
-	 */
 	dimension: Dimension;
-	/**
-	 * Defined bounds for the search space (AABB) relative to origin or absolute world coordinates.
-	 * min/max should be absolute world coordinates.
-	 */
 	bounds: {
 		minX: number;
 		maxX: number;
@@ -21,35 +256,21 @@ export interface BFSScanOptions {
 		minZ: number;
 		maxZ: number;
 	};
-	/**
-	 * Max total nodes to hold in queue/memory to prevent overflows
-	 * @default 5000000
-	 */
 	maxSize?: number;
-	/**
-	 * Returns true if the BFS should continue traversing from this node's neighbors.
-	 * e.g. "Is this block Air or Water?"
-	 */
 	shouldTraverse: (pos: Vector3, block: any) => boolean;
-	/**
-	 * Returns true if this node is considered a "result" or "hit".
-	 * e.g. "Is this a solid block?"
-	 */
 	shouldCapture: (pos: Vector3, block: any) => boolean;
-	/**
-	 * Optional geometric constraint. If provided, must return >= 0 for valid points.
-	 * Can return a 't' value or generic score to be passed to the result.
-	 * If returns -1, the point is outside the constraint and ignored.
-	 */
 	constraint?: (pos: Vector3) => number;
-	/**
-	 * Operation budget per yield.
-	 */
 	opsPerYield: number;
+	onResult?: (result: BFSScannerResult) => void;
 	/**
-	 * Callback when a valid result node is found.
+	 * Stateful memory object. If provided, scanned nodes are persisted here.
 	 */
-	onResult: (result: BFSScannerResult) => void;
+	scanResult?: VolumeScanResult;
+	/**
+	 * If false, skips processing blocks already recorded in the scanResult.
+	 * @default false
+	 */
+	forceRescan?: boolean;
 }
 
 export interface BFSScannerResult {
@@ -60,6 +281,19 @@ export interface BFSScannerResult {
 }
 
 export class BFSScanner {
+	private static globalScanResults = new Map<string, VolumeScanResult>();
+
+	public static getGlobalResult(dimensionId: string): VolumeScanResult {
+		if (!this.globalScanResults.has(dimensionId)) {
+			this.globalScanResults.set(dimensionId, new VolumeScanResult());
+		}
+		return this.globalScanResults.get(dimensionId)!;
+	}
+
+	public static clearGlobalResult(dimensionId: string): void {
+		this.globalScanResults.delete(dimensionId);
+	}
+
 	public static *scan(options: BFSScanOptions): Generator<void, void, unknown> {
 		const {
 			origin,
@@ -71,6 +305,8 @@ export class BFSScanner {
 			constraint,
 			opsPerYield,
 			onResult,
+			scanResult,
+			forceRescan = false,
 		} = options;
 
 		const { minX, maxX, minY, maxY, minZ, maxZ } = bounds;
@@ -84,15 +320,12 @@ export class BFSScanner {
 			return;
 		}
 
-		// Optimized 3D visited array tracking every single block layer
 		const visited = new Uint8Array(totalVolume);
 
-		// 3D Row-Major Indexing: X changes fastest, then Y, then Z
 		const getIdx = (x: number, y: number, z: number) => {
 			return x - minX + (y - minY) * sizeX + (z - minZ) * sizeX * sizeY;
 		};
 
-		// Flat Int32 queue allocation for true 3D indexes
 		let currentQueue = new Int32Array(8192);
 		let queueRead = 0;
 		let queueWrite = 0;
@@ -106,7 +339,6 @@ export class BFSScanner {
 			currentQueue[queueWrite++] = idx;
 		};
 
-		// Seed 3D BFS
 		const seedX = Math.floor(origin.x);
 		const seedY = Math.floor(origin.y);
 		const seedZ = Math.floor(origin.z);
@@ -124,12 +356,10 @@ export class BFSScanner {
 			addToBFSQueue(idx);
 		}
 
-		// Precompute linear offsets for 3D strides
 		const strideX = 1;
 		const strideY = sizeX;
 		const strideZ = sizeX * sizeY;
 
-		// True 6-way volumetric directions
 		const directions = [
 			{ x: 1, y: 0, z: 0, stride: strideX },
 			{ x: -1, y: 0, z: 0, stride: -strideX },
@@ -149,7 +379,6 @@ export class BFSScanner {
 
 			const currIdx = currentQueue[queueRead++];
 
-			// Volumetric un-packing matching row-major strides
 			const lz = (currIdx / strideZ) | 0;
 			const rem = currIdx % strideZ;
 			const ly = (rem / strideY) | 0;
@@ -181,7 +410,16 @@ export class BFSScanner {
 					z: wz + dir.z,
 				};
 
-				// Geometric Cone Constraints Evaluation
+				const alreadyScanned = scanResult?.has(
+					worldPos.x,
+					worldPos.y,
+					worldPos.z,
+				);
+				if (alreadyScanned && !forceRescan) {
+					addToBFSQueue(nIdx);
+					continue;
+				}
+
 				let metadata: any = undefined;
 				if (constraint) {
 					const t = constraint({
@@ -198,14 +436,21 @@ export class BFSScanner {
 				if (!block || !block.isValid) continue;
 
 				if (shouldTraverse(worldPos, block)) {
+					if (scanResult)
+						scanResult.set(worldPos.x, worldPos.y, worldPos.z, 0);
 					addToBFSQueue(nIdx);
 				} else if (shouldCapture(worldPos, block)) {
-					onResult({
-						x: worldPos.x,
-						y: worldPos.y,
-						z: worldPos.z,
-						metadata,
-					});
+					const finalMeta = metadata ?? 1;
+					if (scanResult)
+						scanResult.set(worldPos.x, worldPos.y, worldPos.z, finalMeta);
+					if (onResult) {
+						onResult({
+							x: worldPos.x,
+							y: worldPos.y,
+							z: worldPos.z,
+							metadata: finalMeta,
+						});
+					}
 				}
 			}
 		}
