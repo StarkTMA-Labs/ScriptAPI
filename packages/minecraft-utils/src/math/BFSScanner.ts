@@ -8,10 +8,12 @@ export class VolumeScanResult {
 
 	private readonly chunks = new Map<string, Float64Array>();
 
+	constructor(public readonly resolution: number = 1) {}
+
 	public set(x: number, y: number, z: number, metadata: number = 1): void {
-		const cx = Math.floor(x);
-		const cy = Math.floor(y);
-		const cz = Math.floor(z);
+		const cx = Math.floor(Math.floor(x) / this.resolution);
+		const cy = Math.floor(Math.floor(y) / this.resolution);
+		const cz = Math.floor(Math.floor(z) / this.resolution);
 
 		const chunkX = cx >> VolumeScanResult.CHUNK_SHIFT;
 		const chunkY = cy >> VolumeScanResult.CHUNK_SHIFT;
@@ -36,9 +38,9 @@ export class VolumeScanResult {
 	}
 
 	public get(x: number, y: number, z: number): number | undefined {
-		const cx = Math.floor(x);
-		const cy = Math.floor(y);
-		const cz = Math.floor(z);
+		const cx = Math.floor(Math.floor(x) / this.resolution);
+		const cy = Math.floor(Math.floor(y) / this.resolution);
+		const cz = Math.floor(Math.floor(z) / this.resolution);
 
 		const chunkX = cx >> VolumeScanResult.CHUNK_SHIFT;
 		const chunkY = cy >> VolumeScanResult.CHUNK_SHIFT;
@@ -80,6 +82,8 @@ export class VolumeScanResult {
 		const rSqMax = maxRadius ? maxRadius * maxRadius : Infinity;
 		const rSqMin = minRadius ? minRadius * minRadius : 0;
 
+		const offset = Math.floor(this.resolution / 2);
+
 		for (let attempt = 0; attempt < 50; attempt++) {
 			const randomKey = keys[Math.floor(Math.random() * keys.length)];
 			const chunk = this.chunks.get(randomKey)!;
@@ -100,9 +104,13 @@ export class VolumeScanResult {
 				const meta = chunk[index];
 
 				if (!Number.isNaN(meta)) {
-					const x = (chunkX << VolumeScanResult.CHUNK_SHIFT) + localX;
-					const y = (chunkY << VolumeScanResult.CHUNK_SHIFT) + localY;
-					const z = (chunkZ << VolumeScanResult.CHUNK_SHIFT) + localZ;
+					const sx = (chunkX << VolumeScanResult.CHUNK_SHIFT) + localX;
+					const sy = (chunkY << VolumeScanResult.CHUNK_SHIFT) + localY;
+					const sz = (chunkZ << VolumeScanResult.CHUNK_SHIFT) + localZ;
+
+					const x = sx * this.resolution + offset;
+					const y = sy * this.resolution;
+					const z = sz * this.resolution + offset;
 					const pos = { x, y, z };
 
 					if (center) {
@@ -128,17 +136,27 @@ export class VolumeScanResult {
 		maxNodes: number = 1500,
 		simplify: boolean = true,
 	): Vector3[] | undefined {
-		const startX = Math.floor(start.x);
-		const startY = Math.floor(start.y);
-		const startZ = Math.floor(start.z);
-		const goalX = Math.floor(goal.x);
-		const goalY = Math.floor(goal.y);
-		const goalZ = Math.floor(goal.z);
+		const startX = Math.floor(Math.floor(start.x) / this.resolution);
+		const startY = Math.floor(Math.floor(start.y) / this.resolution);
+		const startZ = Math.floor(Math.floor(start.z) / this.resolution);
 
-		if (!this.has(goalX, goalY, goalZ)) return undefined;
+		const goalX = Math.floor(Math.floor(goal.x) / this.resolution);
+		const goalY = Math.floor(Math.floor(goal.y) / this.resolution);
+		const goalZ = Math.floor(Math.floor(goal.z) / this.resolution);
+
+		// Note: we check grid coordinates using absolute world coordinates internally by multiplying back
+		if (
+			!this.has(
+				goalX * this.resolution,
+				goalY * this.resolution,
+				goalZ * this.resolution,
+			)
+		) {
+			return undefined;
+		}
 
 		if (startX === goalX && startY === goalY && startZ === goalZ) {
-			return [{ x: goalX, y: goalY, z: goalZ }];
+			return [{ x: goal.x, y: goal.y, z: goal.z }];
 		}
 
 		const toKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
@@ -173,6 +191,7 @@ export class VolumeScanResult {
 		];
 
 		let nodesExpanded = 0;
+		const offset = Math.floor(this.resolution / 2);
 
 		while (openSet.length > 0) {
 			if (nodesExpanded++ > maxNodes) return undefined;
@@ -192,7 +211,11 @@ export class VolumeScanResult {
 				let node = goalKey;
 				while (cameFrom.has(node)) {
 					const [px, py, pz] = node.split(",").map(Number);
-					path.push({ x: px, y: py, z: pz });
+					path.push({
+						x: px * this.resolution + offset,
+						y: py * this.resolution,
+						z: pz * this.resolution + offset,
+					});
 					node = cameFrom.get(node)!;
 				}
 				path.reverse();
@@ -223,7 +246,14 @@ export class VolumeScanResult {
 				const nk = toKey(nx, ny, nz);
 
 				if (closed.has(nk)) continue;
-				if (!this.has(nx, ny, nz)) continue;
+				if (
+					!this.has(
+						nx * this.resolution,
+						ny * this.resolution,
+						nz * this.resolution,
+					)
+				)
+					continue;
 
 				const ng = current.g + 1;
 				const existing = gScore.get(nk);
@@ -256,20 +286,14 @@ export interface BFSScanOptions {
 		minZ: number;
 		maxZ: number;
 	};
+	resolution?: number;
 	maxSize?: number;
 	shouldTraverse: (pos: Vector3, block: any) => boolean;
 	shouldCapture: (pos: Vector3, block: any) => boolean;
 	constraint?: (pos: Vector3) => number;
 	opsPerYield: number;
 	onResult?: (result: BFSScannerResult) => void;
-	/**
-	 * Stateful memory object. If provided, scanned nodes are persisted here.
-	 */
 	scanResult?: VolumeScanResult;
-	/**
-	 * If false, skips processing blocks already recorded in the scanResult.
-	 * @default false
-	 */
 	forceRescan?: boolean;
 }
 
@@ -283,9 +307,12 @@ export interface BFSScannerResult {
 export class BFSScanner {
 	private static globalScanResults = new Map<string, VolumeScanResult>();
 
-	public static getGlobalResult(dimensionId: string): VolumeScanResult {
+	public static getGlobalResult(
+		dimensionId: string,
+		resolution: number = 1,
+	): VolumeScanResult {
 		if (!this.globalScanResults.has(dimensionId)) {
-			this.globalScanResults.set(dimensionId, new VolumeScanResult());
+			this.globalScanResults.set(dimensionId, new VolumeScanResult(resolution));
 		}
 		return this.globalScanResults.get(dimensionId)!;
 	}
@@ -299,6 +326,7 @@ export class BFSScanner {
 			origin,
 			dimension,
 			bounds,
+			resolution = 1,
 			maxSize = 5000000,
 			shouldTraverse,
 			shouldCapture,
@@ -311,9 +339,9 @@ export class BFSScanner {
 
 		const { minX, maxX, minY, maxY, minZ, maxZ } = bounds;
 
-		const sizeX = maxX - minX + 1;
-		const sizeY = maxY - minY + 1;
-		const sizeZ = maxZ - minZ + 1;
+		const sizeX = Math.ceil((maxX - minX + 1) / resolution);
+		const sizeY = Math.ceil((maxY - minY + 1) / resolution);
+		const sizeZ = Math.ceil((maxZ - minZ + 1) / resolution);
 
 		const totalVolume = sizeX * sizeY * sizeZ;
 		if (totalVolume > maxSize || totalVolume <= 0) {
@@ -321,10 +349,6 @@ export class BFSScanner {
 		}
 
 		const visited = new Uint8Array(totalVolume);
-
-		const getIdx = (x: number, y: number, z: number) => {
-			return x - minX + (y - minY) * sizeX + (z - minZ) * sizeX * sizeY;
-		};
 
 		let currentQueue = new Int32Array(8192);
 		let queueRead = 0;
@@ -343,15 +367,19 @@ export class BFSScanner {
 		const seedY = Math.floor(origin.y);
 		const seedZ = Math.floor(origin.z);
 
+		const seedGridX = Math.floor((seedX - minX) / resolution);
+		const seedGridY = Math.floor((seedY - minY) / resolution);
+		const seedGridZ = Math.floor((seedZ - minZ) / resolution);
+
 		if (
-			seedX >= minX &&
-			seedX <= maxX &&
-			seedY >= minY &&
-			seedY <= maxY &&
-			seedZ >= minZ &&
-			seedZ <= maxZ
+			seedGridX >= 0 &&
+			seedGridX < sizeX &&
+			seedGridY >= 0 &&
+			seedGridY < sizeY &&
+			seedGridZ >= 0 &&
+			seedGridZ < sizeZ
 		) {
-			const idx = getIdx(seedX, seedY, seedZ);
+			const idx = seedGridX + seedGridY * sizeX + seedGridZ * sizeX * sizeY;
 			visited[idx] = 1;
 			addToBFSQueue(idx);
 		}
@@ -384,10 +412,6 @@ export class BFSScanner {
 			const ly = (rem / strideY) | 0;
 			const lx = rem % strideY;
 
-			const wx = minX + lx;
-			const wy = minY + ly;
-			const wz = minZ + lz;
-
 			for (let d = 0; d < 6; d++) {
 				const dir = directions[d];
 
@@ -405,9 +429,9 @@ export class BFSScanner {
 				visited[nIdx] = 1;
 
 				const worldPos = {
-					x: wx + dir.x,
-					y: wy + (dir.yDir ?? dir.y),
-					z: wz + dir.z,
+					x: minX + nx * resolution,
+					y: minY + ny * resolution,
+					z: minZ + nz * resolution,
 				};
 
 				const alreadyScanned = scanResult?.has(
