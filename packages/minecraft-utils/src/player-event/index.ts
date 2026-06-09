@@ -66,8 +66,8 @@ class EventGroup<T = CustomPlayer> {
 class CustomPlayer {
 	player: Player;
 	stateTick = 0;
-	JumpTick = 0;
-	SneakTick = 0;
+	jumpTick = 0;
+	sneakTick = 0;
 
 	constructor(player: Player) {
 		this.player = player;
@@ -86,13 +86,25 @@ class CustomPlayer {
 		) as EntityInventoryComponent;
 	}
 
+	get isValid() {
+		return this.player.isValid;
+	}
+
+	get location() {
+		return this.player.location;
+	}
+
+	get rotation() {
+		return this.player.getRotation();
+	}
+
 	getEquippedItem(): ItemStack | undefined {
 		return this.equippableComponent.getEquipment(EquipmentSlot.Mainhand);
 	}
 
 	reset() {
 		this.stateTick = 0;
-		this.JumpTick = 0;
+		this.jumpTick = 0;
 		this.player.camera.clear();
 	}
 
@@ -103,22 +115,22 @@ class CustomPlayer {
 			this.player.inputInfo.getButtonState(InputButton.Jump) ===
 			ButtonState.Pressed
 		) {
-			this.JumpTick++;
-		} else if (this.JumpTick > 0) {
-			this.JumpTick = -1;
+			this.jumpTick++;
+		} else if (this.jumpTick > 0) {
+			this.jumpTick = -1;
 		} else {
-			this.JumpTick = 0;
+			this.jumpTick = 0;
 		}
 
 		if (
 			this.player.inputInfo.getButtonState(InputButton.Sneak) ===
 			ButtonState.Pressed
 		) {
-			this.SneakTick++;
-		} else if (this.SneakTick > 0) {
-			this.SneakTick = -1;
+			this.sneakTick++;
+		} else if (this.sneakTick > 0) {
+			this.sneakTick = -1;
 		} else {
-			this.SneakTick = 0;
+			this.sneakTick = 0;
 		}
 	}
 }
