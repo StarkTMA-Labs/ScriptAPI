@@ -114,39 +114,14 @@ class PlayerManager {
 			currentLevel.eventTrigger.triggerPlayerJoinLevel(player);
 			playerObject.playerState = playerState.EXIT_PLAYER;
 		} else if (playerObject.playerLevel !== currentLevel.identifier) {
-			const levels = Array.from(branch.getLevels());
-
-			const currentIndex = currentLevel.levelIndex;
-			const playerIndex = levels.findIndex(
-				(level) => level[0] === playerObject.playerLevel,
-			);
-
-			if (playerIndex === -1) {
-				playerObject.playerState = playerState.SETUP_PLAYER;
-				playerObject.playerLevel = currentLevel.identifier;
-				this.playerDatabase.updateObject(playerObject);
-				return;
+			const oldLevel = branch.getLevel(playerObject.playerLevel);
+			if (oldLevel && playerObject.playerState === playerState.EXIT_PLAYER) {
+				oldLevel.eventTrigger.triggerPlayerLeaveLevel(player);
 			}
 
-			if (currentIndex > playerIndex) {
-				for (let i = playerIndex; i < currentIndex; i++) {
-					const levelToExit = branch.getLevel(levels[i][0]);
-					const levelToEnter = branch.getLevel(levels[i + 1][0]);
-
-					levelToExit?.eventTrigger.triggerPlayerLeaveLevel(player);
-					levelToEnter?.eventTrigger.triggerPlayerJoinLevel(player);
-				}
-			} else if (currentIndex < playerIndex) {
-				const levelToExit = branch.getLevel(levels[playerIndex][0]);
-				const levelToEnter = branch.getLevel(levels[currentIndex][0]);
-
-				levelToExit?.eventTrigger.triggerPlayerLeaveLevel(player);
-				levelToEnter?.eventTrigger.triggerPlayerJoinLevel(player);
-			} else {
-				currentLevel.eventTrigger.triggerPlayerLeaveLevel(player);
-			}
-			playerObject.playerState = playerState.SETUP_PLAYER;
 			playerObject.playerLevel = currentLevel.identifier;
+			playerObject.playerState = playerState.EXIT_PLAYER;
+			currentLevel.eventTrigger.triggerPlayerJoinLevel(player);
 		}
 
 		this.playerDatabase.updateObject(playerObject);
@@ -200,8 +175,6 @@ class PlayerManager {
 			playerObject.playerState = playerState.SETUP_PLAYER;
 			mainLevel0.eventTrigger.triggerPlayerJoinServer(player);
 		} else {
-			playerObject.playerLevel = currentLevel.identifier;
-			playerObject.playerState = playerState.SETUP_PLAYER;
 			currentLevel.eventTrigger.triggerPlayerJoinServer(player);
 			this.updatePlayerState(currentLevel, player, playerObject, branch);
 		}
@@ -329,9 +302,8 @@ class StateMachine {
 		});
 
 		let formattedData = data.map((branch) => {
-			return `§a${branch.branch.padEnd(longestBranchName)}§r | §6${branch.level.padEnd(longestLevelName)}§r | §3${branch.state}§r | ${
-				branch.isActive
-			}§r`;
+			return `§a${branch.branch.padEnd(longestBranchName)}§r | §6${branch.level.padEnd(longestLevelName)}§r | §3${branch.state}§r | ${branch.isActive
+				}§r`;
 		});
 
 		return formattedData;
@@ -378,6 +350,15 @@ class StateMachine {
 
 	public triggerReset() {
 		this.eventTrigger.triggerReset();
+	}
+
+	public initializeExistingPlayers() {
+		mc.world.getAllPlayers().forEach((player) => {
+			this.playersManager.onPlayerJoinServer(player, {
+				branches: this.branches,
+				activeBranches: this.activeBranches,
+			});
+		});
 	}
 
 	public jumpToLevel(levelId: string) {
@@ -525,6 +506,7 @@ mc.world.afterEvents.worldLoad.subscribe((eventData) => {
 	stateMachine = StateMachine.getInstance();
 	mainBranch = stateMachine.createBranch("mainBranch", true);
 	mainLevel0 = mainBranch.addLevel("mainLevel0", true);
+	stateMachine.initializeExistingPlayers();
 });
 
 export let stateMachine: StateMachine;
