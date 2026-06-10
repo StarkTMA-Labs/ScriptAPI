@@ -10,7 +10,7 @@ import {
 	ItemStack,
 } from "@minecraft/server";
 
-type EventCallback<T = CustomPlayer> = (player: T) => void;
+type EventCallback<T = CustomPlayer> = (player: T, args: any[]) => void;
 type PlayerEventType = CustomPlayerEvents | string;
 
 enum CustomPlayerEvents {
@@ -33,14 +33,14 @@ class EventGroup<T = CustomPlayer> {
 		});
 	}
 
-	private run(callbacks: EventCallback<T>[], player: T) {
-		for (const cb of callbacks) cb(player);
+	private run(callbacks: EventCallback<T>[], player: T, args: any[] = []) {
+		for (const cb of callbacks) cb(player, args);
 	}
 
-	trigger(type: PlayerEventType, player: T) {
+	trigger(type: PlayerEventType, player: T, args: any[] = []) {
 		const callbacks = this.callbacks.get(type);
 		if (callbacks) {
-			this.run(callbacks, player);
+			this.run(callbacks, player, args);
 		}
 	}
 
