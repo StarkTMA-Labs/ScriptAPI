@@ -47,6 +47,10 @@ class PlayerManager {
 	private playerDatabase: PlayerDatabase = PlayerDatabase.getInstance();
 	private players: Map<string, mc.Player> = new Map();
 
+	public hasPlayer(id: string): boolean {
+		return this.players.has(id);
+	}
+
 	/**
 	 *
 	 * Debug function to display the players' state in the action bar.
@@ -272,6 +276,8 @@ class StateMachine {
 	private activeBranches: Set<Branch> = new Set();
 	private defaultActiveBranches: Set<Branch> = new Set();
 
+	private initializedPlayers = false;
+
 	/**
 	 * Debug function to display the branches' state in the action bar.
 	 */
@@ -355,10 +361,12 @@ class StateMachine {
 
 	public initializeExistingPlayers() {
 		mc.world.getAllPlayers().forEach((player) => {
-			this.playersManager.onPlayerJoinServer(player, {
-				branches: this.branches,
-				activeBranches: this.activeBranches,
-			});
+			if (!this.playersManager.hasPlayer(player.id)) {
+				this.playersManager.onPlayerJoinServer(player, {
+					branches: this.branches,
+					activeBranches: this.activeBranches,
+				});
+			}
 		});
 	}
 
@@ -421,6 +429,11 @@ class StateMachine {
 		});
 
 		this.events.onTick(() => {
+			if (!this.initializedPlayers) {
+				this.initializeExistingPlayers();
+				this.initializedPlayers = true;
+			}
+
 			this.activeBranches.forEach((branch) => {
 				if (!branch.getActiveLevel()) {
 					this.deactivateBranch(branch);
@@ -511,7 +524,6 @@ mc.world.afterEvents.worldLoad.subscribe((eventData) => {
 	stateMachine = StateMachine.getInstance();
 	mainBranch = stateMachine.createBranch("mainBranch", true);
 	mainLevel0 = mainBranch.addLevel("mainLevel0", true);
-	stateMachine.initializeExistingPlayers();
 });
 
 export let stateMachine: StateMachine;
