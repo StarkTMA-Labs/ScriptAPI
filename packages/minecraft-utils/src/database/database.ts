@@ -214,13 +214,13 @@ class SimpleDatabase<T extends SimpleObject> {
 		}
 
 		system.runInterval(() => {
-			if (this.pendingChanges > this.SAVE_THRESHOLD) {
+			if (this.pendingChanges >= this.SAVE_THRESHOLD) {
 				this.save();
 			}
 		}, this.SAVE_INTERVAL);
 
 		system.beforeEvents.shutdown.subscribe(() => {
-			system.run(() => this.save());
+			this.save();
 		});
 	}
 

@@ -302,8 +302,9 @@ class StateMachine {
 		});
 
 		let formattedData = data.map((branch) => {
-			return `§a${branch.branch.padEnd(longestBranchName)}§r | §6${branch.level.padEnd(longestLevelName)}§r | §3${branch.state}§r | ${branch.isActive
-				}§r`;
+			return `§a${branch.branch.padEnd(longestBranchName)}§r | §6${branch.level.padEnd(longestLevelName)}§r | §3${branch.state}§r | ${
+				branch.isActive
+			}§r`;
 		});
 
 		return formattedData;
@@ -428,12 +429,16 @@ class StateMachine {
 				}
 			});
 			this.playersManager.tick(this.activeBranches);
-
-			//let playerData = this.playersManager.debugPlayers();
-			//let levelData = this.debugBranches();
-			//let combinedData = [...playerData, ...levelData];
-			//mc.world.getDimension(mc.MinecraftDimensionTypes.overworld).runCommand(`title @a actionbar ${combinedData.join("\n")}`);
 		});
+	}
+
+	public debug() {
+		let playerData = this.playersManager.debugPlayers();
+		let levelData = this.debugBranches();
+		let combinedData = [...playerData, ...levelData];
+		mc.world
+			.getDimension("minecraft:overworld")
+			.runCommand(`title @a actionbar ${combinedData.join("\n")}`);
 	}
 }
 
