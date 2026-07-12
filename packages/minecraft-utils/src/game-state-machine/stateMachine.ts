@@ -459,7 +459,7 @@ class StateMachine {
 	}
 
 	public getPlayers() {
-		return this.playersManager.getPlayers();
+		return Array.from(this.playersManager.getPlayers());
 	}
 }
 
