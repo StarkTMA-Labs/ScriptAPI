@@ -260,6 +260,10 @@ class PlayerManager {
 				});
 		});
 	}
+
+	public getPlayers() {
+		return this.players.values();
+	}
 }
 
 class StateMachine {
@@ -452,6 +456,10 @@ class StateMachine {
 		mc.world
 			.getDimension("minecraft:overworld")
 			.runCommand(`title @a actionbar ${combinedData.join("\n")}`);
+	}
+
+	public getPlayers() {
+		return this.playersManager.getPlayers();
 	}
 }
 
