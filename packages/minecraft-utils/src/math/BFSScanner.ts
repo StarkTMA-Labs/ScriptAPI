@@ -381,7 +381,50 @@ export class BFSScanner {
 		) {
 			const idx = seedGridX + seedGridY * sizeX + seedGridZ * sizeX * sizeY;
 			visited[idx] = 1;
-			addToBFSQueue(idx);
+			const seedWorldPos = {
+				x: minX + seedGridX * resolution,
+				y: minY + seedGridY * resolution,
+				z: minZ + seedGridZ * resolution,
+			};
+			if (dimension.isChunkLoaded(seedWorldPos)) {
+				const seedBlock = dimension.getBlock(seedWorldPos);
+				if (seedBlock && seedBlock.isValid) {
+					let seedMeta: any = undefined;
+					if (constraint) {
+						const t = constraint({
+							x: seedWorldPos.x + 0.5,
+							y: seedWorldPos.y + 0.5,
+							z: seedWorldPos.z + 0.5,
+						});
+						if (t !== -1) seedMeta = t;
+					}
+					if (shouldTraverse(seedWorldPos, seedBlock)) {
+						addToBFSQueue(idx);
+					}
+					if (shouldCapture(seedWorldPos, seedBlock)) {
+						const finalMeta = seedMeta ?? 1;
+						if (scanResult)
+							scanResult.set(
+								seedWorldPos.x,
+								seedWorldPos.y,
+								seedWorldPos.z,
+								finalMeta,
+							);
+						if (onResult) {
+							onResult({
+								x: seedWorldPos.x,
+								y: seedWorldPos.y,
+								z: seedWorldPos.z,
+								metadata: finalMeta,
+							});
+						}
+					}
+				} else {
+					addToBFSQueue(idx);
+				}
+			} else {
+				addToBFSQueue(idx);
+			}
 		}
 
 		const strideX = 1;
@@ -460,10 +503,9 @@ export class BFSScanner {
 				if (!block || !block.isValid) continue;
 
 				if (shouldTraverse(worldPos, block)) {
-					if (scanResult)
-						scanResult.set(worldPos.x, worldPos.y, worldPos.z, 0);
 					addToBFSQueue(nIdx);
-				} else if (shouldCapture(worldPos, block)) {
+				}
+				if (shouldCapture(worldPos, block)) {
 					const finalMeta = metadata ?? 1;
 					if (scanResult)
 						scanResult.set(worldPos.x, worldPos.y, worldPos.z, finalMeta);
