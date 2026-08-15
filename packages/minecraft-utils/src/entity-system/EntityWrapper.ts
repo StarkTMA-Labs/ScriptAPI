@@ -19,6 +19,8 @@ import {
 import { getNamespace } from "../constants";
 import { EntityAttributeDatabase } from "./EntityAttributeDatabase";
 import type { EntityManager } from "./EntityManager";
+import { AIGoal } from "./AIGoal";
+import { AIGoalSystem } from "./AIGoalSystem";
 
 export enum EntityEvents {
 	WorldLoad = "worldLoad",
@@ -42,12 +44,14 @@ export class EntityWrapper<E extends Entity = Entity> {
 	readonly entity: E;
 	stateTick = 0;
 	manager?: EntityManager<any>;
+	aiGoalSystem: AIGoalSystem<this>;
 
 	private attributeDB?: EntityAttributeDatabase;
 
 	constructor(entity: E, manager?: EntityManager<any>) {
 		this.entity = entity;
 		this.manager = manager;
+		this.aiGoalSystem = new AIGoalSystem(this);
 	}
 
 	private get db(): EntityAttributeDatabase {
@@ -296,10 +300,30 @@ export class EntityWrapper<E extends Entity = Entity> {
 	}
 
 	// -------------------------------------------------------------------------
+	// AI Goal System Helpers
+	// -------------------------------------------------------------------------
+	addGoal(goal: AIGoal<this>): void {
+		this.aiGoalSystem.addGoal(goal);
+	}
+
+	removeGoal(identifier: string): void {
+		this.aiGoalSystem.removeGoal(identifier);
+	}
+
+	hasActiveGoal(identifier: string): boolean {
+		return this.aiGoalSystem.hasActiveGoal(identifier);
+	}
+
+	getGoal(identifier: string): AIGoal<this> | undefined {
+		return this.aiGoalSystem.getGoal(identifier);
+	}
+
+	// -------------------------------------------------------------------------
 	// Tick Loop
 	// -------------------------------------------------------------------------
 	tick(): void {
 		if (!this.isValid) return;
 		this.stateTick++;
+		this.aiGoalSystem.tick();
 	}
 }

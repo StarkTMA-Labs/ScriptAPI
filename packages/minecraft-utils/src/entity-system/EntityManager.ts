@@ -7,10 +7,12 @@
 import { system, world, Entity } from "@minecraft/server";
 import { EntityWrapper, EntityEvents } from "./EntityWrapper";
 import { EventGroup } from "./EventGroup";
+import { AIGoal } from "./AIGoal";
 
 export abstract class EntityManager<T extends EntityWrapper = EntityWrapper> {
 	private entities = new Map<string, T>();
 	private events = new Map<string, EventGroup<T>>();
+	private defaultGoalFactories: ((wrapper: T) => AIGoal<T>)[] = [];
 
 	protected constructor(tickInterval: number = 1) {
 		world.afterEvents.entitySpawn.subscribe(({ entity }) => {
@@ -48,6 +50,13 @@ export abstract class EntityManager<T extends EntityWrapper = EntityWrapper> {
 		return this.entities.get(id);
 	}
 
+	/**
+	 * Registers a default goal factory to automatically attach goals to newly managed entities.
+	 */
+	registerDefaultGoal(factory: (wrapper: T) => AIGoal<T>): void {
+		this.defaultGoalFactories.push(factory);
+	}
+
 	addEntity(entity: Entity): T | undefined {
 		if (this.entities.has(entity.id)) {
 			return this.entities.get(entity.id);
@@ -55,6 +64,9 @@ export abstract class EntityManager<T extends EntityWrapper = EntityWrapper> {
 
 		const wrapper = this.createEntityWrapper(entity);
 		wrapper.manager = this;
+		for (const factory of this.defaultGoalFactories) {
+			wrapper.addGoal(factory(wrapper));
+		}
 		this.entities.set(entity.id, wrapper);
 
 		this.triggerEntityEvent(EntityEvents.EntityAdded, wrapper);
