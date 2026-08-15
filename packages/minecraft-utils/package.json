@@ -1,6 +1,6 @@
 {
 	"name": "@starktma/minecraft-utils",
-	"version": "1.5.38",
+	"version": "1.5.39",
 	"description": "",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
@@ -51,8 +51,8 @@
 		"LICENSE"
 	],
 	"devDependencies": {
-		"@minecraft/server": "^2.7.0",
-		"@minecraft/server-ui": "^2.0.0",
+		"@minecraft/server": "^2.9.0",
+		"@minecraft/server-ui": "^2.1.0",
 		"typescript": "^5.9.2"
 	}
 }
