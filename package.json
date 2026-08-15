@@ -23,6 +23,8 @@
 	},
 	"dependencies": {
 		"@minecraft/server": "^2.9.0",
-		"@minecraft/server-ui": "^2.1.0"
+		"@minecraft/server-ui": "^2.1.0",
+		"@starktma/minecraft-utils": "^1.5.40",
+		"typescript": "^7.0.2"
 	}
 }

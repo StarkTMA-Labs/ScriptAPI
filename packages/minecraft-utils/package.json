@@ -1,6 +1,6 @@
 {
 	"name": "@starktma/minecraft-utils",
-	"version": "1.5.40",
+	"version": "1.5.41",
 	"description": "",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
@@ -53,6 +53,7 @@
 	"devDependencies": {
 		"@minecraft/server": "^2.9.0",
 		"@minecraft/server-ui": "^2.1.0",
-		"typescript": "^5.9.2"
+		"@starktma/minecraft-utils": "^1.5.40",
+		"typescript": "^7.0.2"
 	}
 }
