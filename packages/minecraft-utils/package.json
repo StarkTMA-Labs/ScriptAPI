@@ -1,6 +1,6 @@
 {
 	"name": "@starktma/minecraft-utils",
-	"version": "1.5.37",
+	"version": "1.5.38",
 	"description": "",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
@@ -33,9 +33,9 @@
 			"import": "./dist/database/index.js",
 			"types": "./dist/database/index.d.ts"
 		},
-		"./player-events": {
-			"import": "./dist/player-event/index.js",
-			"types": "./dist/player-event/index.d.ts"
+		"./entity-system": {
+			"import": "./dist/entity-system/index.js",
+			"types": "./dist/entity-system/index.d.ts"
 		},
 		"./game-state-machine": {
 			"import": "./dist/game-state-machine/index.js",
