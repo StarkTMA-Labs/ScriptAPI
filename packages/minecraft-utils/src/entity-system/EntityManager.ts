@@ -21,8 +21,22 @@ export abstract class EntityManager<T extends EntityWrapper = EntityWrapper> {
 			}
 		});
 
+		world.afterEvents.entityLoad.subscribe(({ entity }) => {
+			if (this.shouldManageEntity(entity)) {
+				const existing = this.getEntity(entity.id);
+				if (existing) {
+					(existing as any).entity = entity;
+				} else {
+					this.addEntity(entity);
+				}
+			}
+		});
+
 		world.afterEvents.entityRemove.subscribe(({ removedEntityId }) => {
-			this.removeEntity(removedEntityId);
+			const wrapper = this.getEntity(removedEntityId);
+			if (!wrapper || wrapper.removeOnInvalid) {
+				this.removeEntity(removedEntityId);
+			}
 		});
 
 		world.afterEvents.worldLoad.subscribe(() => {
@@ -59,7 +73,9 @@ export abstract class EntityManager<T extends EntityWrapper = EntityWrapper> {
 
 	addEntity(entity: Entity): T | undefined {
 		if (this.entities.has(entity.id)) {
-			return this.entities.get(entity.id);
+			const existing = this.entities.get(entity.id)!;
+			(existing as any).entity = entity;
+			return existing;
 		}
 
 		const wrapper = this.createEntityWrapper(entity);
@@ -114,7 +130,9 @@ export abstract class EntityManager<T extends EntityWrapper = EntityWrapper> {
 		const all = this.getAllEntities();
 		for (const wrapper of all) {
 			if (!wrapper.isValid) {
-				this.removeEntity(wrapper.id);
+				if (wrapper.removeOnInvalid) {
+					this.removeEntity(wrapper.id);
+				}
 				continue;
 			}
 

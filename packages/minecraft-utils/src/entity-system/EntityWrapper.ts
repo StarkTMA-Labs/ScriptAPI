@@ -45,6 +45,7 @@ export class EntityWrapper<E extends Entity = Entity> {
 	stateTick = 0;
 	manager?: EntityManager<any>;
 	aiGoalSystem: AIGoalSystem<this>;
+	removeOnInvalid: boolean = true;
 
 	private attributeDB?: EntityAttributeDatabase;
 
