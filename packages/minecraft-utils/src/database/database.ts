@@ -20,13 +20,25 @@ class DatabaseManager {
 		}
 	}
 
+	private isTargetValid(): boolean {
+		if (this.target instanceof Entity) {
+			return this.target.isValid;
+		}
+		return true;
+	}
+
 	/**
 	 * Checks if a JSON database with the given name exists.
 	 * @param databaseName The name of the database.
 	 * @returns True if the database exists, false otherwise.
 	 */
 	hasJSONDatabase(databaseName: string) {
-		return this.target.getDynamicProperty(databaseName) !== undefined;
+		if (!this.isTargetValid()) return false;
+		try {
+			return this.target.getDynamicProperty(databaseName) !== undefined;
+		} catch {
+			return false;
+		}
 	}
 
 	/**
@@ -35,54 +47,57 @@ class DatabaseManager {
 	 * @param database The data to be stored in the database.
 	 */
 	addJSONDatabase(databaseName: string, database: object) {
-		const jsonString = JSON.stringify(database);
-		const existingProp = this.target.getDynamicProperty(databaseName) as
-			| string
-			| undefined;
-		let existingChunks = 0;
+		if (!this.isTargetValid()) return;
+		try {
+			const jsonString = JSON.stringify(database);
+			const existingProp = this.target.getDynamicProperty(databaseName) as
+				| string
+				| undefined;
+			let existingChunks = 0;
 
-		if (existingProp) {
-			try {
-				const propObj = JSON.parse(existingProp);
-				if (
-					propObj &&
-					typeof propObj === "object" &&
-					DatabaseManager.CHUNK_KEY in propObj
-				) {
-					existingChunks = propObj[DatabaseManager.CHUNK_KEY];
+			if (existingProp) {
+				try {
+					const propObj = JSON.parse(existingProp);
+					if (
+						propObj &&
+						typeof propObj === "object" &&
+						DatabaseManager.CHUNK_KEY in propObj
+					) {
+						existingChunks = propObj[DatabaseManager.CHUNK_KEY];
+					}
+				} catch {}
+			}
+			if (
+				jsonString.length <= DatabaseManager.DYNAMIC_PROP_MAX_LENGTH ||
+				jsonString.length === 0
+			) {
+				if (existingChunks > 0) {
+					for (let i = 0; i < existingChunks; i++) {
+						const partName = `${databaseName}_${i}`;
+						this.target.setDynamicProperty(partName, undefined);
+					}
 				}
-			} catch {}
-		}
-		if (
-			jsonString.length <= DatabaseManager.DYNAMIC_PROP_MAX_LENGTH ||
-			jsonString.length === 0
-		) {
-			if (existingChunks > 0) {
-				for (let i = 0; i < existingChunks; i++) {
+				this.target.setDynamicProperty(databaseName, jsonString);
+			} else {
+				const chunkSize = DatabaseManager.DYNAMIC_PROP_MAX_LENGTH;
+				const chunkCount = Math.ceil(jsonString.length / chunkSize);
+				if (existingChunks > 0) {
+					for (let i = 0; i < existingChunks; i++) {
+						const oldPartName = `${databaseName}_${i}`;
+						this.target.setDynamicProperty(oldPartName, undefined);
+					}
+				}
+				for (let i = 0; i < chunkCount; i++) {
+					const start = i * chunkSize;
+					const end = start + chunkSize;
+					const chunk = jsonString.slice(start, end);
 					const partName = `${databaseName}_${i}`;
-					this.target.setDynamicProperty(partName, undefined);
+					this.target.setDynamicProperty(partName, chunk);
 				}
+				const meta = { [DatabaseManager.CHUNK_KEY]: chunkCount };
+				this.target.setDynamicProperty(databaseName, JSON.stringify(meta));
 			}
-			this.target.setDynamicProperty(databaseName, jsonString);
-		} else {
-			const chunkSize = DatabaseManager.DYNAMIC_PROP_MAX_LENGTH;
-			const chunkCount = Math.ceil(jsonString.length / chunkSize);
-			if (existingChunks > 0) {
-				for (let i = 0; i < existingChunks; i++) {
-					const oldPartName = `${databaseName}_${i}`;
-					this.target.setDynamicProperty(oldPartName, undefined);
-				}
-			}
-			for (let i = 0; i < chunkCount; i++) {
-				const start = i * chunkSize;
-				const end = start + chunkSize;
-				const chunk = jsonString.slice(start, end);
-				const partName = `${databaseName}_${i}`;
-				this.target.setDynamicProperty(partName, chunk);
-			}
-			const meta = { [DatabaseManager.CHUNK_KEY]: chunkCount };
-			this.target.setDynamicProperty(databaseName, JSON.stringify(meta));
-		}
+		} catch {}
 	}
 
 	/**
@@ -90,26 +105,29 @@ class DatabaseManager {
 	 * @param databaseName The name of the database.
 	 */
 	removeJSONDatabase(databaseName: string) {
-		const propString = this.target.getDynamicProperty(databaseName) as
-			| string
-			| undefined;
-		if (propString !== undefined) {
-			try {
-				const propObj = JSON.parse(propString);
-				if (
-					propObj &&
-					typeof propObj === "object" &&
-					DatabaseManager.CHUNK_KEY in propObj
-				) {
-					const chunkCount = propObj[DatabaseManager.CHUNK_KEY];
-					for (let i = 0; i < chunkCount; i++) {
-						const partName = `${databaseName}_${i}`;
-						this.target.setDynamicProperty(partName, undefined);
+		if (!this.isTargetValid()) return;
+		try {
+			const propString = this.target.getDynamicProperty(databaseName) as
+				| string
+				| undefined;
+			if (propString !== undefined) {
+				try {
+					const propObj = JSON.parse(propString);
+					if (
+						propObj &&
+						typeof propObj === "object" &&
+						DatabaseManager.CHUNK_KEY in propObj
+					) {
+						const chunkCount = propObj[DatabaseManager.CHUNK_KEY];
+						for (let i = 0; i < chunkCount; i++) {
+							const partName = `${databaseName}_${i}`;
+							this.target.setDynamicProperty(partName, undefined);
+						}
 					}
-				}
-			} catch {}
-			this.target.setDynamicProperty(databaseName, undefined);
-		}
+				} catch {}
+				this.target.setDynamicProperty(databaseName, undefined);
+			}
+		} catch {}
 	}
 
 	/**
@@ -119,6 +137,9 @@ class DatabaseManager {
 	 * @throws An error if the database does not exist.
 	 */
 	getJSONDatabase(databaseName: string) {
+		if (!this.isTargetValid()) {
+			throw new Error("Target entity is invalid");
+		}
 		const propString = this.target.getDynamicProperty(databaseName) as
 			| string
 			| undefined;
@@ -177,6 +198,7 @@ class DatabaseManager {
 class SimpleDatabase<T extends SimpleObject> {
 	private mainDB: DatabaseManager;
 	private localDB: T[];
+	private targetEntity?: Entity;
 
 	private pendingChanges = 0;
 
@@ -198,6 +220,9 @@ class SimpleDatabase<T extends SimpleObject> {
 	) {
 		this.databaseName = `${getNamespace()}:${databaseName}`;
 		this.mainDB = new DatabaseManager(target);
+		if (target instanceof Entity) {
+			this.targetEntity = target;
+		}
 
 		if (saveThreshold !== undefined) {
 			this.SAVE_THRESHOLD = saveThreshold;
@@ -214,12 +239,14 @@ class SimpleDatabase<T extends SimpleObject> {
 		}
 
 		system.runInterval(() => {
+			if (this.targetEntity && !this.targetEntity.isValid) return;
 			if (this.pendingChanges >= this.SAVE_THRESHOLD) {
 				this.save();
 			}
 		}, this.SAVE_INTERVAL);
 
 		system.beforeEvents.shutdown.subscribe(() => {
+			if (this.targetEntity && !this.targetEntity.isValid) return;
 			this.save();
 		});
 	}
@@ -229,7 +256,10 @@ class SimpleDatabase<T extends SimpleObject> {
 	 */
 	private save() {
 		this.pendingChanges = 0;
-		this.mainDB.addJSONDatabase(this.databaseName, this.localDB);
+		if (this.targetEntity && !this.targetEntity.isValid) return;
+		try {
+			this.mainDB.addJSONDatabase(this.databaseName, this.localDB);
+		} catch {}
 	}
 
 	/**
