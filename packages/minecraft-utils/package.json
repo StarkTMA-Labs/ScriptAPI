@@ -1,6 +1,6 @@
 {
 	"name": "@starktma/minecraft-utils",
-	"version": "1.5.44",
+	"version": "1.5.45",
 	"description": "",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
@@ -40,6 +40,10 @@
 		"./game-state-machine": {
 			"import": "./dist/game-state-machine/index.js",
 			"types": "./dist/game-state-machine/index.d.ts"
+		},
+		"./spatial": {
+			"import": "./dist/spatial/index.js",
+			"types": "./dist/spatial/index.d.ts"
 		}
 	},
 	"publishConfig": {
