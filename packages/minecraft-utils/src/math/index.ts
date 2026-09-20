@@ -7,15 +7,8 @@ import { RGB, RGBA, Vector2, Vector3, VectorXZ } from "@minecraft/server";
  * @returns An object containing the red, green, blue, and alpha components as numbers between 0 and 1.
  * @throws Error if the hex string is invalid.
  */
-export function hexToRgba(
-	hex: string,
-	stripAlpha: boolean = false,
-): RGB | RGBA {
-	if (
-		!/^#([a-fA-F0-9]{4}|[a-fA-F0-9]{8}|[a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/.test(
-			hex,
-		)
-	) {
+export function hexToRgba(hex: string, stripAlpha: boolean = false): RGB | RGBA {
+	if (!/^#([a-fA-F0-9]{4}|[a-fA-F0-9]{8}|[a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/.test(hex)) {
 		throw new Error("Invalid hex color");
 	}
 
@@ -31,9 +24,8 @@ export function hexToRgba(
 	const green = parseInt(normalized.substring(2, 4), 16) / 255;
 	const blue = parseInt(normalized.substring(4, 6), 16) / 255;
 	const alpha =
-		(normalized.length === 8
-			? parseInt(normalized.substring(6, 8), 16)
-			: 255) / 255;
+		(normalized.length === 8 ? parseInt(normalized.substring(6, 8), 16) : 255) /
+		255;
 
 	if (stripAlpha) {
 		return { red, green, blue };
@@ -79,10 +71,7 @@ export class Vector {
 		return result as T;
 	}
 
-	static add<T extends Vector3 | Vector2 | VectorXZ>(
-		v1: T,
-		...vectors: T[]
-	): T {
+	static add<T extends Vector3 | Vector2 | VectorXZ>(v1: T, ...vectors: T[]): T {
 		const result = Vector.copy(v1);
 		for (const v of vectors) {
 			result.x += v.x;
@@ -96,10 +85,7 @@ export class Vector {
 		return result;
 	}
 
-	static subtract<T extends Vector3 | Vector2 | VectorXZ>(
-		v1: T,
-		...vectors: T[]
-	): T {
+	static subtract<T extends Vector3 | Vector2 | VectorXZ>(v1: T, ...vectors: T[]): T {
 		const result = Vector.copy(v1);
 		for (const v of vectors) {
 			result.x -= v.x;
@@ -147,10 +133,7 @@ export class Vector {
 		return Vector.scalarDivide(v, mag);
 	}
 
-	static distance<T extends Vector3 | Vector2 | VectorXZ>(
-		v1: T,
-		v2: T,
-	): number {
+	static distance<T extends Vector3 | Vector2 | VectorXZ>(v1: T, v2: T): number {
 		const diff = Vector.subtract(v1, v2);
 		return Vector.magnitude(diff);
 	}
@@ -268,5 +251,4 @@ export class Trigonometry {
 	}
 }
 
-export * from "./BFSScanner";
 export * from "./Perlin2D";
