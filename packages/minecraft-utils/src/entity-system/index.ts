@@ -7,3 +7,4 @@ export * from "./EntityAttributeDatabase";
 export * from "./AIGoal";
 export * from "./AIGoalSystem";
 
+export * from "./SpatialTracker";

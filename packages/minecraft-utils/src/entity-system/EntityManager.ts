@@ -8,11 +8,13 @@ import { system, world, Entity } from "@minecraft/server";
 import { EntityWrapper, EntityEvents } from "./EntityWrapper";
 import { EventGroup } from "./EventGroup";
 import { AIGoal } from "./AIGoal";
+import { SpatialTracker } from "./SpatialTracker";
 
 export abstract class EntityManager<T extends EntityWrapper = EntityWrapper> {
 	private entities = new Map<string, T>();
 	private events = new Map<string, EventGroup<T>>();
 	private defaultGoalFactories: ((wrapper: T) => AIGoal<T>)[] = [];
+	private spatialTracker?: SpatialTracker<T>;
 
 	protected constructor(tickInterval: number = 1) {
 		world.afterEvents.entitySpawn.subscribe(({ entity }) => {
@@ -54,6 +56,20 @@ export abstract class EntityManager<T extends EntityWrapper = EntityWrapper> {
 	/** Predicate determining whether an entity should be managed by this manager */
 	protected shouldManageEntity(entity: Entity): boolean {
 		return !!(entity && entity.isValid);
+	}
+
+	/** Opt-in spatial index; off until enabled. */
+	enableSpatialTracker(gridSize: number = 64): void {
+		if (this.spatialTracker) return;
+		this.spatialTracker = new SpatialTracker<T>(gridSize);
+		this.spatialTracker.attachTo(this);
+	}
+
+	get spatial(): SpatialTracker<T> {
+		if (!this.spatialTracker) {
+			throw new Error("Spatial tracker not enabled: call enableSpatialTracker() first");
+		}
+		return this.spatialTracker;
 	}
 
 	getAllEntities(): T[] {
