@@ -114,10 +114,12 @@ export class BFSScanner {
 		const strideZ = sizeX * sizeY;
 
 		// 6 orthogonal directions in flattened 1D index and 3D coordinate deltas
+		// (4 horizontal directions first so sizeY === 1 planar scans only iterate 0..3)
 		const deltaX = [1, -1, 0, 0, 0, 0];
-		const deltaY = [0, 0, 1, -1, 0, 0];
-		const deltaZ = [0, 0, 0, 0, 1, -1];
-		const strideOffsets = [strideX, -strideX, strideY, -strideY, strideZ, -strideZ];
+		const deltaY = [0, 0, 0, 0, 1, -1];
+		const deltaZ = [0, 0, 1, -1, 0, 0];
+		const strideOffsets = [strideX, -strideX, strideZ, -strideZ, strideY, -strideY];
+		const maxStep = sizeY === 1 ? 4 : 6;
 
 		// ------------------------------------------------------------------
 		// Step 3: Allocate flat visited array, queue, and reusable vector
@@ -125,8 +127,9 @@ export class BFSScanner {
 		const visited = new Uint8Array(totalVolume);
 		const queue = new IndexQueue();
 
-		// Reusable mutable vector instance to avoid any per-node heap allocation
+		// Reusable mutable vector instances to avoid any per-node heap allocation
 		const currentWorldPos: Vector3 = { x: 0, y: 0, z: 0 };
+		const constraintPos: Vector3 = { x: 0, y: 0, z: 0 };
 		const resultPayload: BFSScannerResult = { x: 0, y: 0, z: 0, metadata: 1 };
 		// ------------------------------------------------------------------
 		// Step 4: Validate and initialize seed node (fail early if invalid)
@@ -149,19 +152,12 @@ export class BFSScanner {
 		currentWorldPos.y = minY + seedGridY * resolution;
 		currentWorldPos.z = minZ + seedGridZ * resolution;
 
-		// Fail early if seed chunk is not loaded or block is invalid
-		if (!dimension.isChunkLoaded(currentWorldPos)) return;
-
-		const seedBlock = dimension.getBlock(currentWorldPos);
-		if (!seedBlock || !seedBlock.isValid) return;
-
 		let seedMetadata: any = undefined;
 		if (constraint) {
-			const constraintValue = constraint({
-				x: currentWorldPos.x + 0.5,
-				y: currentWorldPos.y + 0.5,
-				z: currentWorldPos.z + 0.5,
-			});
+			constraintPos.x = currentWorldPos.x + 0.5;
+			constraintPos.y = currentWorldPos.y + 0.5;
+			constraintPos.z = currentWorldPos.z + 0.5;
+			const constraintValue = constraint(constraintPos);
 			if (constraintValue === -1) {
 				return;
 			}
@@ -171,39 +167,53 @@ export class BFSScanner {
 		const seedIndex = seedGridX + seedGridY * strideY + seedGridZ * strideZ;
 		visited[seedIndex] = 1;
 
-		if (shouldCapture(currentWorldPos, seedBlock)) {
-			const finalMetadata = seedMetadata ?? 1;
-			scanResult?.set(
-				currentWorldPos.x,
-				currentWorldPos.y,
-				currentWorldPos.z,
-				finalMetadata,
-			);
-			if (onResult) {
-				resultPayload.x = currentWorldPos.x;
-				resultPayload.y = currentWorldPos.y;
-				resultPayload.z = currentWorldPos.z;
-				resultPayload.metadata = finalMetadata;
-				onResult(resultPayload);
-			}
-		}
-
-		if (shouldTraverse(currentWorldPos, seedBlock)) {
+		if (
+			scanResult?.has(currentWorldPos.x, currentWorldPos.y, currentWorldPos.z) &&
+			!forceRescan
+		) {
 			queue.push(seedIndex);
+		} else {
+			if (!dimension.isChunkLoaded(currentWorldPos)) return;
+
+			const seedBlock = dimension.getBlock(currentWorldPos);
+			if (!seedBlock || !seedBlock.isValid) return;
+
+			if (shouldCapture(currentWorldPos, seedBlock)) {
+				const finalMetadata = seedMetadata ?? 1;
+				scanResult?.set(
+					currentWorldPos.x,
+					currentWorldPos.y,
+					currentWorldPos.z,
+					finalMetadata,
+				);
+				if (onResult) {
+					resultPayload.x = currentWorldPos.x;
+					resultPayload.y = currentWorldPos.y;
+					resultPayload.z = currentWorldPos.z;
+					resultPayload.metadata = finalMetadata;
+					onResult(resultPayload);
+				}
+			} else if (forceRescan) {
+				scanResult?.delete(
+					currentWorldPos.x,
+					currentWorldPos.y,
+					currentWorldPos.z,
+				);
+			}
+
+			if (shouldTraverse(currentWorldPos, seedBlock)) {
+				queue.push(seedIndex);
+			}
 		}
 
 		// ------------------------------------------------------------------
 		// Step 5: Execute BFS loop with cooperative yielding
 		// ------------------------------------------------------------------
 		let operationsCount = 0;
+		let cachedStepsCount = 0;
+		const maxCachedStepsPerYield = opsPerYield * 16;
 
 		while (queue.hasItems) {
-			// Yield control to Minecraft tick thread if operation threshold is reached
-			if (++operationsCount >= opsPerYield) {
-				operationsCount = 0;
-				yield;
-			}
-
 			const currentIndex = queue.pop();
 
 			// Unpack flat 1D index into primitive local coordinates
@@ -213,9 +223,9 @@ export class BFSScanner {
 			const localX = sliceRemainder % strideY;
 
 			// --------------------------------------------------------------
-			// Step 6: Expand 6 orthogonal neighbors using stride arithmetic
+			// Step 6: Expand orthogonal neighbors using stride arithmetic
 			// --------------------------------------------------------------
-			for (let step = 0; step < 6; step++) {
+			for (let step = 0; step < maxStep; step++) {
 				const nextX = localX + deltaX[step];
 				if (nextX < 0 || nextX >= sizeX) continue;
 
@@ -234,6 +244,17 @@ export class BFSScanner {
 				currentWorldPos.y = minY + nextY * resolution;
 				currentWorldPos.z = minZ + nextZ * resolution;
 
+				// Mathematical boundary/constraint filter
+				let neighborMetadata: any = undefined;
+				if (constraint) {
+					constraintPos.x = currentWorldPos.x + 0.5;
+					constraintPos.y = currentWorldPos.y + 0.5;
+					constraintPos.z = currentWorldPos.z + 0.5;
+					const constraintValue = constraint(constraintPos);
+					if (constraintValue === -1) continue;
+					neighborMetadata = constraintValue;
+				}
+
 				// Cache hit check: skip expensive dimension queries if already scanned
 				if (
 					scanResult?.has(
@@ -244,19 +265,19 @@ export class BFSScanner {
 					!forceRescan
 				) {
 					queue.push(neighborIndex);
+					if (++cachedStepsCount >= maxCachedStepsPerYield) {
+						cachedStepsCount = 0;
+						operationsCount = 0;
+						yield;
+					}
 					continue;
 				}
 
-				// Mathematical boundary/constraint filter
-				let neighborMetadata: any = undefined;
-				if (constraint) {
-					const constraintValue = constraint({
-						x: currentWorldPos.x + 0.5,
-						y: currentWorldPos.y + 0.5,
-						z: currentWorldPos.z + 0.5,
-					});
-					if (constraintValue === -1) continue;
-					neighborMetadata = constraintValue;
+				// Yield control to Minecraft tick thread based on actual world block evaluations
+				if (++operationsCount >= opsPerYield) {
+					operationsCount = 0;
+					cachedStepsCount = 0;
+					yield;
 				}
 
 				// Minecraft Bedrock world safety checks
@@ -280,6 +301,12 @@ export class BFSScanner {
 						resultPayload.metadata = finalMetadata;
 						onResult(resultPayload);
 					}
+				} else if (forceRescan) {
+					scanResult?.delete(
+						currentWorldPos.x,
+						currentWorldPos.y,
+						currentWorldPos.z,
+					);
 				}
 
 				// Enqueue neighbor if passable

@@ -3,6 +3,8 @@ import { Vector3 } from "@minecraft/server";
 export interface PathfindingGrid {
 	has(worldX: number, worldY: number, worldZ: number): boolean;
 	resolution: number;
+	/** When true, only the 4 horizontal (X/Z) neighbors are expanded. */
+	flat?: boolean;
 }
 
 /**
@@ -10,11 +12,11 @@ export interface PathfindingGrid {
  * O(log N) push and pop, avoiding linear array scans and splice overhead.
  */
 class MinBinaryHeap {
-	private keys: bigint[] = [];
+	private keys: number[] = [];
 	private fScores: number[] = [];
 	private size: number = 0;
 
-	public push(key: bigint, fScore: number): void {
+	public push(key: number, fScore: number): void {
 		let index = this.size++;
 		this.keys[index] = key;
 		this.fScores[index] = fScore;
@@ -31,7 +33,7 @@ class MinBinaryHeap {
 		}
 	}
 
-	public pop(): bigint | undefined {
+	public pop(): number | undefined {
 		if (this.size === 0) return undefined;
 
 		const minKey = this.keys[0];
@@ -85,40 +87,45 @@ class MinBinaryHeap {
  */
 export class AStarPathfinder {
 	/**
-	 * 6 orthogonal 3D search directions.
+	 * 6 orthogonal 3D search directions (4 horizontal first so `flat` grids can check 0..3).
 	 */
 	private static readonly DIRECTION_DELTAS = [
 		{ dx: 1, dy: 0, dz: 0 },
 		{ dx: -1, dy: 0, dz: 0 },
-		{ dx: 0, dy: 1, dz: 0 },
-		{ dx: 0, dy: -1, dz: 0 },
 		{ dx: 0, dy: 0, dz: 1 },
 		{ dx: 0, dy: 0, dz: -1 },
+		{ dx: 0, dy: 1, dz: 0 },
+		{ dx: 0, dy: -1, dz: 0 },
 	];
 
 	/**
-	 * Packs 3D grid coordinates into a 64-bit BigInt key to avoid string allocations.
-	 * Coordinates between -1,000,000 and +1,000,000 are supported (21 bits per axis).
+	 * Packs 3D grid coordinates into a 53-bit safe integer key to avoid string or BigInt allocations.
+	 * Supports X/Z grid coordinates in [-524288, +524287] and Y grid coordinates in [-4096, +4095].
 	 */
-	private static toGridKey(gridX: number, gridY: number, gridZ: number): bigint {
-		const uX = BigInt((gridX + 1000000) & 0x1fffff);
-		const uY = BigInt((gridY + 1000000) & 0x1fffff);
-		const uZ = BigInt((gridZ + 1000000) & 0x1fffff);
-		return (uX << 42n) | (uY << 21n) | uZ;
+	private static toGridKey(gridX: number, gridY: number, gridZ: number): number {
+		const uX = (gridX + 524288) & 0xfffff;
+		const uZ = (gridZ + 524288) & 0xfffff;
+		const uY = (gridY + 4096) & 0x1fff;
+		return uX * 0x200000000 + uZ * 0x2000 + uY;
 	}
 
 	/**
-	 * Unpacks a 64-bit BigInt key back into 3D grid coordinates.
+	 * Unpacks a 53-bit safe integer key back into 3D grid coordinates.
 	 */
-	private static fromGridKey(key: bigint): {
+	private static fromGridKey(key: number): {
 		gridX: number;
 		gridY: number;
 		gridZ: number;
 	} {
-		const gridZ = Number(key & 0x1fffffn) - 1000000;
-		const gridY = Number((key >> 21n) & 0x1fffffn) - 1000000;
-		const gridX = Number((key >> 42n) & 0x1fffffn) - 1000000;
-		return { gridX, gridY, gridZ };
+		const uY = key & 0x1fff;
+		const rem = (key - uY) / 0x2000;
+		const uZ = rem & 0xfffff;
+		const uX = (rem - uZ) / 0x100000;
+		return {
+			gridX: uX - 524288,
+			gridY: uY - 4096,
+			gridZ: uZ - 524288,
+		};
 	}
 
 	/**
@@ -202,9 +209,9 @@ export class AStarPathfinder {
 		const goalKey = this.toGridKey(goalGridX, goalGridY, goalGridZ);
 
 		const openHeap = new MinBinaryHeap();
-		const gScores = new Map<bigint, number>();
-		const cameFrom = new Map<bigint, bigint>();
-		const closedSet = new Set<bigint>();
+		const gScores = new Map<number, number>();
+		const cameFrom = new Map<number, number>();
+		const closedSet = new Set<number>();
 
 		gScores.set(startKey, 0);
 		const initialH = this.getManhattanDistance(
@@ -219,6 +226,7 @@ export class AStarPathfinder {
 
 		let expandedCount = 0;
 		const halfResolutionOffset = Math.floor(resolution / 2);
+		const dirCount = grid.flat ? 4 : 6;
 
 		while (openHeap.length > 0) {
 			if (expandedCount++ > maxNodes) {
@@ -234,7 +242,7 @@ export class AStarPathfinder {
 			// Goal reached: reconstruct path
 			if (currentKey === goalKey) {
 				const path: Vector3[] = [];
-				let traceKey: bigint | undefined = goalKey;
+				let traceKey: number | undefined = goalKey;
 
 				while (traceKey !== undefined) {
 					const { gridX, gridY, gridZ } = this.fromGridKey(traceKey);
@@ -256,9 +264,10 @@ export class AStarPathfinder {
 				gridZ: currentZ,
 			} = this.fromGridKey(currentKey);
 			const currentG = gScores.get(currentKey)!;
+			const tentativeG = currentG + 1;
 
-			// Expand 6 adjacent neighbors
-			for (let i = 0; i < 6; i++) {
+			// Expand adjacent neighbors
+			for (let i = 0; i < dirCount; i++) {
 				const dir = this.DIRECTION_DELTAS[i];
 				const nextX = currentX + dir.dx;
 				const nextY = currentY + dir.dy;
@@ -267,20 +276,17 @@ export class AStarPathfinder {
 
 				if (closedSet.has(neighborKey)) continue;
 
-				// Check grid occupancy
-				if (
+				const existingG = gScores.get(neighborKey);
+				if (existingG !== undefined) {
+					if (existingG <= tentativeG) continue;
+				} else if (
 					!grid.has(
 						nextX * resolution,
 						nextY * resolution,
 						nextZ * resolution,
 					)
 				) {
-					continue;
-				}
-
-				const tentativeG = currentG + 1;
-				const existingG = gScores.get(neighborKey);
-				if (existingG !== undefined && existingG <= tentativeG) {
+					closedSet.add(neighborKey);
 					continue;
 				}
 

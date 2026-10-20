@@ -22,14 +22,14 @@ export class VolumeScanResult implements PathfindingGrid {
 	private static readonly CHUNK_SHIFT = 4;
 	private static readonly BITMASK_WORDS = 128; // 4096 / 32
 
-	// Fast 64-bit integer hash map to avoid string key allocations
-	private readonly chunkMap = new Map<bigint, ChunkEntry>();
+	// Fast 53-bit safe integer hash map to avoid string or BigInt allocations
+	private readonly chunkMap = new Map<number, ChunkEntry>();
 
 	// Direct array of active chunks for O(1) random selection
 	private readonly chunkList: ChunkEntry[] = [];
 
 	// 1-element MRU spatial locality cache
-	private lastKey: bigint = -1n;
+	private lastKey: number = -1;
 	private lastChunk: ChunkEntry | undefined = undefined;
 
 	constructor(public readonly resolution: number = 1) {}
@@ -42,14 +42,14 @@ export class VolumeScanResult implements PathfindingGrid {
 	}
 
 	/**
-	 * Packs 3D chunk coordinates into a unique 64-bit integer key.
-	 * Supports coordinates between -1,000,000 and +1,000,000.
+	 * Packs 3D chunk coordinates into a unique 53-bit safe integer key (zero heap allocation).
+	 * Supports X/Z chunk coordinates in [-524288, +524287] and Y chunk coordinates in [-4096, +4095].
 	 */
-	private static toChunkKey(chunkX: number, chunkY: number, chunkZ: number): bigint {
-		const uX = BigInt((chunkX + 1000000) & 0x1fffff);
-		const uY = BigInt((chunkY + 1000000) & 0x1fffff);
-		const uZ = BigInt((chunkZ + 1000000) & 0x1fffff);
-		return (uX << 42n) | (uY << 21n) | uZ;
+	private static toChunkKey(chunkX: number, chunkY: number, chunkZ: number): number {
+		const uX = (chunkX + 524288) & 0xfffff;
+		const uZ = (chunkZ + 524288) & 0xfffff;
+		const uY = (chunkY + 4096) & 0x1fff;
+		return uX * 0x200000000 + uZ * 0x2000 + uY;
 	}
 
 	/**
@@ -190,12 +190,39 @@ export class VolumeScanResult implements PathfindingGrid {
 	}
 
 	/**
+	 * Unmarks the voxel at the given world coordinate. Returns true if it was occupied.
+	 */
+	public delete(worldX: number, worldY: number, worldZ: number): boolean {
+		const gridX = this.toGridCoordinate(worldX);
+		const gridY = this.toGridCoordinate(worldY);
+		const gridZ = this.toGridCoordinate(worldZ);
+
+		const chunkX = gridX >> VolumeScanResult.CHUNK_SHIFT;
+		const chunkY = gridY >> VolumeScanResult.CHUNK_SHIFT;
+		const chunkZ = gridZ >> VolumeScanResult.CHUNK_SHIFT;
+
+		const chunk = this.getChunk(chunkX, chunkY, chunkZ);
+		if (!chunk) return false;
+
+		const localX = gridX & VolumeScanResult.CHUNK_MASK;
+		const localY = gridY & VolumeScanResult.CHUNK_MASK;
+		const localZ = gridZ & VolumeScanResult.CHUNK_MASK;
+		const voxelIndex = VolumeScanResult.toVoxelIndex(localX, localY, localZ);
+		const wordIndex = voxelIndex >> 5;
+		const mask = 1 << (voxelIndex & 31);
+
+		if ((chunk.bits[wordIndex] & mask) === 0) return false;
+		chunk.bits[wordIndex] &= ~mask;
+		return true;
+	}
+
+	/**
 	 * Clears all stored chunk data.
 	 */
 	public clear(): void {
 		this.chunkMap.clear();
 		this.chunkList.length = 0;
-		this.lastKey = -1n;
+		this.lastKey = -1;
 		this.lastChunk = undefined;
 	}
 
