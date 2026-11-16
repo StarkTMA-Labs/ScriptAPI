@@ -5,7 +5,6 @@ import { Trigonometry } from "../math";
 class StructuresManager {
 	static getRotationEnum(angle: number, offset?: number): StructureRotation {
 		const diff = snapYawToGrid(Trigonometry.unsignedAngle(angle - (offset ?? 0)));
-		console.log(diff);
 
 		if (Math.abs(diff - 90) < Number.EPSILON) return StructureRotation.Rotate90;
 		if (Math.abs(diff - 180) < Number.EPSILON) return StructureRotation.Rotate180;
