@@ -20,7 +20,7 @@ import {
 	effectManager,
 	EffectObject,
 	EffectConfig,
-	PotionConfig,
+	Effect,
 } from "./effectsAPI";
 import { StructuresManager } from "./structuresAPI";
 
@@ -342,6 +342,6 @@ export {
 	effectManager,
 	EffectObject,
 	EffectConfig,
-	PotionConfig,
+	Effect,
 	StructuresManager,
 };
