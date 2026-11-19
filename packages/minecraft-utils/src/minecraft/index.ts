@@ -22,7 +22,6 @@ import {
 	EffectConfig,
 	PotionConfig,
 } from "./effectsAPI";
-import { ProjectileManager, projectileManager } from "./projectileAPI";
 import { StructuresManager } from "./structuresAPI";
 
 export function getBlocksInASphere(
@@ -344,7 +343,5 @@ export {
 	EffectObject,
 	EffectConfig,
 	PotionConfig,
-	ProjectileManager,
-	projectileManager,
 	StructuresManager,
 };
