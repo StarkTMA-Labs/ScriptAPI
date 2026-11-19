@@ -11,13 +11,12 @@ import { SimpleDatabase, SimpleObject } from "../database";
 import { hexToRgba } from "../math";
 
 interface EffectObject extends SimpleObject {
-	effectType: string;
 	amplifier: number;
 	duration: number;
 }
 
 interface EffectConfig {
-	effectType: string;
+	id: string;
 	color: string;
 	sounds?: { ambient?: string; start?: string; end?: string };
 	particleType?: string;
@@ -28,7 +27,7 @@ interface EffectConfig {
 }
 
 interface Effect {
-	readonly type: string;
+	readonly id: string;
 	add(entity: Entity, amplifier: number, duration: number): void;
 	remove(entity: Entity): void;
 	has(entity: Entity): boolean;
@@ -36,14 +35,20 @@ interface Effect {
 
 interface EffectMessage {
 	entity: string;
-	effectType: string;
+	effect?: string;
 	amplifier?: number;
 	duration?: number;
+	origin?: string;
+	ticks?: number;
+	except?: string[];
 }
 
-const DEFAULT_EXCLUDED_TYPES = ["minecraft:item", "minecraft:xp_orb"];
+const DEFAULT_EXCLUDED_TYPES = [
+	"minecraft:item",
+	"minecraft:arrow",
+	"minecraft:xp_orb",
+];
 const EVENT_NAMESPACE = "starkeffects";
-const PAUSE_TAG = "starkeffects|pause_effect";
 const NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
 
 class EffectDatabase extends SimpleDatabase<EffectObject> {
@@ -57,6 +62,7 @@ class EffectManager {
 	private configs = new Map<string, EffectConfig>();
 	private tracked = new Map<string, Entity>();
 	private databases = new Map<string, EffectDatabase>();
+	private readonly origin = Math.random().toString(36).slice(2);
 
 	static getInstance(): EffectManager {
 		return (EffectManager.instance ??= new EffectManager());
@@ -65,26 +71,21 @@ class EffectManager {
 	private constructor() {}
 
 	registerEffect(config: EffectConfig): Effect {
-		const type = config.effectType;
-		this.configs.set(type, config);
+		const id = config.id;
+		this.configs.set(id, config);
 		return {
-			type,
+			id,
 			add: (entity, amplifier, duration) =>
-				this.addEffect(entity, type, amplifier, duration),
-			remove: (entity) => this.removeEffect(entity, type),
-			has: (entity) => this.hasEffect(entity, type),
+				this.addEffect(entity, id, amplifier, duration),
+			remove: (entity) => this.removeEffect(entity, id),
+			has: (entity) => this.hasEffect(entity, id),
 		};
 	}
 
-	addEffect(
-		entity: Entity,
-		effectType: string,
-		amplifier: number,
-		duration: number,
-	): void {
-		const config = this.configs.get(effectType);
+	addEffect(entity: Entity, id: string, amplifier: number, duration: number): void {
+		const config = this.configs.get(id);
 		if (!config) {
-			this.send("add", { entity: entity.id, effectType, amplifier, duration });
+			this.send("add", { entity: entity.id, effect: id, amplifier, duration });
 			return;
 		}
 		if ((config.excludedTypes ?? DEFAULT_EXCLUDED_TYPES).includes(entity.typeId))
@@ -92,30 +93,30 @@ class EffectManager {
 		config.onAdd?.(entity, amplifier, duration);
 
 		const db = this.database(entity);
-		const existing = db.getObject(effectType);
+		const existing = db.getObject(id);
 		const stronger =
 			!existing ||
 			amplifier > existing.amplifier ||
 			(amplifier === existing.amplifier && duration > existing.duration);
 
 		if (stronger) {
-			db.updateObject({ id: effectType, effectType, amplifier, duration });
+			db.updateObject({ id, amplifier, duration });
 			db.forceSave();
 			if (!existing) this.playSound(entity, config.sounds?.start);
 		}
 		this.tracked.set(entity.id, entity);
 	}
 
-	removeEffect(entity: Entity, effectType: string): void {
-		const config = this.configs.get(effectType);
+	removeEffect(entity: Entity, id: string): void {
+		const config = this.configs.get(id);
 		if (!config) {
-			this.send("remove", { entity: entity.id, effectType });
+			this.send("remove", { entity: entity.id, effect: id });
 			return;
 		}
 
 		const db = this.database(entity);
-		const had = db.hasObject(effectType);
-		db.removeObject(effectType);
+		const had = db.hasObject(id);
+		db.removeObject(id);
 		db.forceSave();
 		if (had) this.end(entity, config);
 		if (db.getAllObjects().length === 0) this.untrack(entity.id);
@@ -125,19 +126,19 @@ class EffectManager {
 		const db = this.database(entity);
 		const effects = db.getAllObjects();
 
-		for (const tag of entity.getTags()) {
-			if (tag.startsWith(PAUSE_TAG)) entity.removeTag(tag);
-		}
-
 		db.eraseAllObjects();
 		db.forceSave();
 		this.untrack(entity.id);
-		for (const effect of effects)
-			this.end(entity, this.configs.get(effect.effectType));
+		for (const effect of effects) this.end(entity, this.configs.get(effect.id));
 	}
 
-	hasEffect(entity: Entity, effectType: string): boolean {
-		return this.database(entity).hasObject(effectType);
+	extendEffects(entity: Entity, ticks: number, except: string[] = []): void {
+		this.extendLocal(entity, ticks, except);
+		this.send("extend", { entity: entity.id, origin: this.origin, ticks, except });
+	}
+
+	hasEffect(entity: Entity, id: string): boolean {
+		return this.database(entity).hasObject(id);
 	}
 
 	getEffects(entity: Entity): EffectObject[] {
@@ -183,27 +184,23 @@ class EffectManager {
 	private tick(entity: Entity): void {
 		const db = this.database(entity);
 		const effects = db.getAllObjects();
-		const pauseTags = entity.getTags().filter((tag) => tag.startsWith(PAUSE_TAG));
-		const unpaused = pauseTags.map((tag) => tag.split("|")[2]);
 
 		for (const effect of effects) {
-			const config = this.configs.get(effect.effectType);
+			const config = this.configs.get(effect.id);
 			config?.handler?.(entity, effect);
 
-			const current = db.getObject(effect.effectType);
-			if (!current || current.duration !== effect.duration) continue;
+			const current = db.getObject(effect.id);
+			if (!current) continue;
 
 			if (system.currentTick % 40 === 0)
 				this.playSound(entity, config?.sounds?.ambient, 0.5);
 			if (system.currentTick % 20 === 0 && config)
 				this.spawnParticle(entity, config);
 
-			if (pauseTags.length > 0 && !unpaused.includes(effect.effectType)) continue;
-
 			if (current.duration > 1) {
 				db.updateObject({ ...current, duration: current.duration - 1 });
 			} else {
-				db.removeObject(effect.effectType);
+				db.removeObject(effect.id);
 				db.forceSave();
 				this.end(entity, config);
 			}
@@ -265,30 +262,48 @@ class EffectManager {
 		} catch {}
 	}
 
-	private send(action: "add" | "remove", message: EffectMessage): void {
+	private extendLocal(entity: Entity, ticks: number, except: string[]): void {
+		if (!this.tracked.has(entity.id)) return;
+		const db = this.database(entity);
+		for (const effect of db.getAllObjects()) {
+			const duration = effect.duration + ticks;
+			if (!except.includes(effect.id) && duration > 0) {
+				db.updateObject({ ...effect, duration });
+			}
+		}
+	}
+
+	private send(action: "add" | "remove" | "extend", message: EffectMessage): void {
 		system.sendScriptEvent(`${EVENT_NAMESPACE}:${action}`, JSON.stringify(message));
 	}
 
-	private receive(id: string, raw: string): void {
+	private receive(eventId: string, raw: string): void {
 		let message: EffectMessage;
 		try {
 			message = JSON.parse(raw);
 		} catch {
 			return;
 		}
-		if (!this.configs.has(message.effectType)) return;
 		const entity = world.getEntity(message.entity);
 		if (!entity?.isValid) return;
 
-		if (id === `${EVENT_NAMESPACE}:add`) {
+		if (eventId === `${EVENT_NAMESPACE}:extend`) {
+			if (message.origin !== this.origin) {
+				this.extendLocal(entity, message.ticks ?? 0, message.except ?? []);
+			}
+			return;
+		}
+		if (!message.effect || !this.configs.has(message.effect)) return;
+
+		if (eventId === `${EVENT_NAMESPACE}:add`) {
 			this.addEffect(
 				entity,
-				message.effectType,
+				message.effect,
 				message.amplifier ?? 0,
 				message.duration ?? 0,
 			);
-		} else if (id === `${EVENT_NAMESPACE}:remove`) {
-			this.removeEffect(entity, message.effectType);
+		} else if (eventId === `${EVENT_NAMESPACE}:remove`) {
+			this.removeEffect(entity, message.effect);
 		}
 	}
 
@@ -312,7 +327,7 @@ class EffectManager {
 						: seconds > 10
 							? `§e${seconds}s`
 							: `§c${seconds}s`;
-				const name = effect.effectType
+				const name = effect.id
 					.split("_")
 					.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
 					.join(" ");
