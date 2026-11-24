@@ -21,7 +21,7 @@ interface EffectConfig {
 	sounds?: { ambient?: string; start?: string; end?: string };
 	particleType?: string;
 	excludedTypes?: string[];
-	handler?: (entity: Entity, effect: EffectObject) => void;
+	onTick?: (entity: Entity, effect: EffectObject) => void;
 	onAdd?: (entity: Entity, amplifier: number, duration: number) => void;
 	onRemove?: (entity: Entity) => void;
 }
@@ -187,7 +187,7 @@ class EffectManager {
 
 		for (const effect of effects) {
 			const config = this.configs.get(effect.id);
-			config?.handler?.(entity, effect);
+			config?.onTick?.(entity, effect);
 
 			const current = db.getObject(effect.id);
 			if (!current) continue;
