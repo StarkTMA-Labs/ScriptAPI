@@ -1,5 +1,5 @@
 import { Vector3, StructureRotation } from "@minecraft/server";
-import { snapYawToGrid } from ".";
+import { snapYawToGrid } from "./grid";
 import { Trigonometry } from "../math";
 
 class StructuresManager {
