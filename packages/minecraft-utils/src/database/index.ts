@@ -1,1 +1,2 @@
-export { SimpleDatabase, SimpleObject } from "./database";
+export { SimpleDatabase } from "./SimpleDatabase";
+export type { SimpleObject } from "./interfaces";
