@@ -1,8 +1,8 @@
 import * as mc from "@minecraft/server";
-import { PlayerDatabase } from "./database";
+import { PlayerDatabase } from "./PlayerDatabase";
 import { PlayerObject, playerState } from "./interfaces";
-import { Level } from "./level";
-import { Branch } from "./branch";
+import { Level } from "./Level";
+import { Branch } from "./Branch";
 import { getNamespace } from "../constants";
 
 class StateMachineEvents {

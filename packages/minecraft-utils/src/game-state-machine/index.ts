@@ -1,1 +1,1 @@
-export { mainBranch, mainLevel0, stateMachine } from "./stateMachine";
+export { mainBranch, mainLevel0, stateMachine } from "./StateMachine";

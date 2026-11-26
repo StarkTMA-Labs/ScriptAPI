@@ -1,4 +1,4 @@
-import { BranchDatabase } from "./database";
+import { BranchDatabase } from "./BranchDatabase";
 import { BranchObject, levelState } from "./interfaces";
 import * as mc from "@minecraft/server";
 

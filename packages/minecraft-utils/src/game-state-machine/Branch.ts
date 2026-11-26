@@ -1,5 +1,5 @@
-import { BranchDatabase } from "./database";
-import { Level } from "./level";
+import { BranchDatabase } from "./BranchDatabase";
+import { Level } from "./Level";
 import { levelState } from "./interfaces";
 import { getNamespace } from "../constants";
 
